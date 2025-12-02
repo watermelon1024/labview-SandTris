@@ -178,13 +178,13 @@ class SandTetrisCore:
         # shape = states[self.active_piece.rotation]
         minx = min(p[0] for p in shape)
         maxx = max(p[0] for p in shape)
-        maxy = max(p[1] for p in shape)
+        h = max(p[1] for p in shape) + 1
         width = maxx - minx + 1
         start_x = (self.pw - width * self.ppc) // 2
-        self.active_piece_pos = (start_x, -maxy * self.ppc)  # start above visible area
+        self.active_piece_pos = (start_x, -h * self.ppc)  # start above visible area
         # if spawn collides with existing settled cells (converted pixel grid collapsed), then game over
-        if self._is_piece_collides(self.active_piece_pos, self.active_piece.rotation):
-            self.game_over = True
+        # if self._is_piece_collides(self.active_piece_pos, self.active_piece.rotation):
+        #     self.game_over = True
 
     def _get_piece_pixels(
         self, piece: Optional[Piece] = None, pos: Optional[Pos] = None, rot: Optional[int] = None
@@ -200,7 +200,6 @@ class SandTetrisCore:
             for x, y in shape
             for i in range(self.ppc)
             for j in range(self.ppc)
-            if x >= 0 and y >= 0
         ]
 
     def _get_piece_bottom_pixels(
@@ -390,9 +389,9 @@ class SandTetrisCore:
         if self.pixel_grid[py][px] != 0:
             return False
         # also check moving particles list to avoid overlap
-        # for p in self.particles:
-        #     if p.x == px and p.y == py:
-        #         return False
+        for p in self.particles:
+            if p.x == px and p.y == py:
+                return False
         return True
 
     # -------------------------
@@ -519,11 +518,9 @@ class SandTetrisCore:
         # If we want smoother sand, run simulate_particles multiple times per step.
         sim_steps = 2
         total_removed = 0
-        newly_settled_all = []
+        newly_settled = []
         for _ in range(sim_steps):
             newly_settled = self.simulate_particles()
-            if newly_settled:
-                newly_settled_all.extend(newly_settled)
 
         # 4. for each newly settled pixel, do local BFS (only once per connected cluster)
         # We will group BFS by color and avoid duplicate BFS on same pixel by visited set.
@@ -531,7 +528,7 @@ class SandTetrisCore:
         clusters_cleared = 0
         pixels_removed_total = 0
 
-        for px, py, color in newly_settled_all:
+        for px, py, color in newly_settled:
             if (px, py) in visited_global:
                 continue
             # BFS from this pixel
@@ -559,6 +556,7 @@ class SandTetrisCore:
             for x in range(self.pw):
                 if self.pixel_grid[y][x] != 0:
                     self.game_over = True
+                    print("Game over detected due to settled pixels at top.", (x, y))
                     break
             if self.game_over:
                 break
@@ -573,7 +571,8 @@ class SandTetrisCore:
         for p in self.particles:
             grid_copy[p.y][p.x] = p.color  # overlay moving particles for visualization
         for p in self._get_piece_pixels():
-            grid_copy[p.y][p.x] = p.color  # overlay active piece for visualization
+            if p.y >= 0:
+                grid_copy[p.y][p.x] = p.color  # overlay active piece for visualization
         # include moving particles for rendering as list of tuples
         particles_copy = [(p.x, p.y, p.color) for p in self.particles]
         return {
