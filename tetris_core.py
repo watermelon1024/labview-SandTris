@@ -1,5 +1,8 @@
-from collections import deque
 import random
+from collections import deque
+from typing import Optional
+
+from tetris_ai import AIPlan, compute_best_move
 
 # --- Constants ---
 DEFAULT_COLS = 10
@@ -13,6 +16,7 @@ ACTION_RIGHT = 2
 ACTION_ROTATE = 3
 ACTION_DOWN = 4  # Soft drop
 ACTION_DROP = 5  # Hard drop
+ACTION_AI = 6  # Let AI decide
 
 # Colors (對應 LabVIEW Intensity Graph Z-Scale)
 # 0 is empty
@@ -50,6 +54,7 @@ class SandtrisCore:
         self.piece_x_px = 0  # Top-left X in PIXELS
         self.piece_y_px = 0  # Top-left Y in PIXELS
         self.piece_color = 1
+        self.ai_plan: Optional[AIPlan] = None
 
         self.spawn_piece()
 
@@ -72,6 +77,9 @@ class SandtrisCore:
 
         self.piece_x_px = start_col * self.ppc
         self.piece_y_px = start_row * self.ppc
+
+        # --- Reset AI Plan ---
+        self.ai_plan = None
 
     def get_projected_pixels(self, px_x, px_y, shape_cells):
         """
@@ -287,6 +295,29 @@ class SandtrisCore:
         if self.game_over:
             return
 
+        # check for AI action
+        if action == ACTION_AI:
+            # 1. 如果還沒有計畫，呼叫外部函數計算 (只算一次)
+            if self.ai_plan is None:
+                self.ai_plan = compute_best_move(self)
+            # 2. 執行計畫 (Override action)
+            # 優先級：旋轉 -> 橫移 -> 下落
+            if self.ai_plan["rotation_count"] != 0:
+                action = ACTION_ROTATE
+                self.ai_plan["rotation_count"] -= 1
+            else:
+                # 處理 X 軸移動
+                # 容許一點誤差，因為浮點數或 ppc 對齊問題
+                diff = self.ai_plan["target_x"] - self.piece_x_px
+
+                if abs(diff) <= self.ppc:  # 已經對齊
+                    # 到達目標，執行硬降落
+                    action = ACTION_DROP
+                elif diff > 0:
+                    action = ACTION_RIGHT
+                elif diff < 0:
+                    action = ACTION_LEFT
+
         # --- 1. Control Active Piece (Rigid Body) ---
         move_dist = self.ppc  # Move by one full cell width horizontally
 
@@ -377,9 +408,10 @@ def get_view():
 # If run as main, demo loop (text only)
 if __name__ == "__main__":
     import itertools
+    import time
 
     s = SandtrisCore(8, 10, 4)  # small board for demo
-
+    ai_mode = input("Enable AI mode? (y/n): ").lower() == "y"
     print("Started demo: press Ctrl+C to quit.")
     # spawn a few pieces programmatically
     for i in itertools.count(0):
@@ -391,11 +423,15 @@ if __name__ == "__main__":
         if s.game_over:
             print("Game over at tick", i, "score", s.score)
             break
-
-        ipt = input("Press Enter to continue, or type 'q' to quit: ")
-        if ipt.lower() == "q":
-            break
-        s.step(int(ipt) if ipt.isdigit() else ACTION_NONE)
+        if ai_mode:
+            action = ACTION_AI
+            time.sleep(0.5)  # slow down for demo
+        else:
+            ipt = input("Press Enter to continue, or type 'q' to quit: ").strip()
+            if ipt.lower() == "q":
+                break
+            action = int(ipt) if ipt and ipt.isdigit() else ACTION_NONE
+        s.step(action)
         print("Score:", s.score)
         print(
             "\x1b[0m\n".join("".join(f"\x1b[{40 + p}m{p}" for p in row) for row in s.get_render_grid()),
