@@ -311,8 +311,8 @@ class SandtrisCore:
                 diff = self.ai_plan["target_x"] - self.piece_x_px
 
                 if abs(diff) <= self.ppc:  # 已經對齊
-                    # 到達目標，執行硬降落
-                    action = ACTION_DROP
+                    # 到達目標，執行降落
+                    action = ACTION_DOWN
                 elif diff > 0:
                     action = ACTION_RIGHT
                 elif diff < 0:
@@ -410,7 +410,7 @@ if __name__ == "__main__":
     import itertools
     import time
 
-    s = SandtrisCore(8, 10, 4)  # small board for demo
+    s = SandtrisCore(12, 12, 4)  # small board for demo
     ai_mode = input("Enable AI mode? (y/n): ").lower() == "y"
     print("Started demo: press Ctrl+C to quit.")
     # spawn a few pieces programmatically
@@ -425,7 +425,7 @@ if __name__ == "__main__":
             break
         if ai_mode:
             action = ACTION_AI
-            time.sleep(0.5)  # slow down for demo
+            time.sleep(0.25)  # slow down for demo
         else:
             ipt = input("Press Enter to continue, or type 'q' to quit: ").strip()
             if ipt.lower() == "q":
