@@ -130,7 +130,30 @@ class SandtrisCore:
         min_y = min(p[1] for p in new_shape)
         new_shape = [(x - min_x, y - min_y) for x, y in new_shape]
 
-        if not self.check_collision(self.piece_x_px, self.piece_y_px, new_shape):
+        # Wall Kick (牆壁推擠修正)
+        # 計算新形狀在當前位置的絕對像素邊界
+        # 由於每個 cell 寬度是 ppc，我们需要算最左邊和最右邊的像素點
+        # min_cell_x 肯定是 0 (因為上面正規化了)，所以最左邊是 self.piece_x_px
+        # 我們只需要算最右邊會不會超出去
+        max_cell_x = max(p[0] for p in new_shape)
+        # 預測的最左與最右像素 X 座標
+        current_min_px = self.piece_x_px
+        current_max_px = self.piece_x_px + (max_cell_x * self.ppc) + (self.ppc - 1)
+
+        offset_x = 0
+
+        if current_min_px < 0:  # 檢查左牆 (Left Wall)
+            # 如果小於 0，就往右推 (正值) 把它推回 0
+            offset_x = -current_min_px
+        elif current_max_px >= self.width_px:  # 檢查右牆 (Right Wall)
+            # 如果超出寬度，就往左推 (負值)
+            offset_x = (self.width_px - 1) - current_max_px
+
+        # 計算修正後的目標 X 座標
+        target_x = self.piece_x_px + offset_x
+
+        if not self.check_collision(target_x, self.piece_y_px, new_shape):
+            self.piece_x_px = target_x
             self.current_shape_cells = new_shape
 
     def shatter_and_lock(self):
