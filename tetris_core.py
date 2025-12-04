@@ -1,12 +1,20 @@
 import itertools
 import random
+import time
 from collections import deque
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from tetris_ai import compute_best_move
 
 if TYPE_CHECKING:
+    from typing import TypedDict
+
     from tetris_ai import AIPlan
+
+    class Statistics(TypedDict):
+        score: int
+        play_time: str
+
 
 # --- Type Definitions ---
 Pixel = Tuple[int, int]
@@ -66,6 +74,7 @@ class SandtrisCore:
         self.grid: Grid = [[0 for _ in range(self.width_px)] for _ in range(self.height_px)]
 
         self.score = 0
+        self.start_time = time.time()
         self.game_over = False
         self._just_shattered = False
 
@@ -400,15 +409,22 @@ class SandtrisCore:
 
         return display
 
+    def get_play_time(self) -> float:
+        return time.time() - self.start_time
+
+    def get_play_time_formatted(self) -> str:
+        minutes, seconds = divmod(int(self.get_play_time()), 60)
+        return f"{minutes:02}:{seconds:02}"
+
 
 # --- Interface for LabVIEW ---
 def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> SandtrisCore:
     return SandtrisCore(cols, rows, ppc)
 
 
-def update(game: SandtrisCore, action: int) -> int:  # 0 for ok, 1 for game over
+def update(game: SandtrisCore, action: int) -> "Statistics":
     game.step(action)
-    return 1 if game.game_over else 0
+    return {"score": game.score, "play_time": game.get_play_time_formatted()}
 
 
 def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
@@ -429,11 +445,13 @@ def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
     ]
 
 
+def get_statistics(game: SandtrisCore) -> "Statistics":
+    return {"score": game.score, "play_time": game.get_play_time_formatted()}
+
+
 # If run as main, demo loop (text only)
 if __name__ == "__main__":
-    import time
-
-    s = SandtrisCore(12, 12, 4)  # small board for demo
+    s = SandtrisCore(8, 12, 4)  # small board for demo
     ai_mode = input("Enable AI mode? (y/n): ").lower() == "y"
     print("Started demo: press Ctrl+C to quit.")
     for i in itertools.count(0):
@@ -451,11 +469,11 @@ if __name__ == "__main__":
                 break
             action = int(ipt) if ipt and ipt.isdigit() else ACTION_NONE
         s.step(action)
-        print("Score:", s.score)
         print(
             "\x1b[0m\n".join("".join(f"\x1b[{40 + p}m{p}" for p in row) for row in s.get_render_grid()),
             end="\x1b[0m\n",
         )
+        print("Score:", s.score, "Time:", s.get_play_time_formatted())
         print("=" * 38, "Tick", i, "END", "=" * 38)
 
     print("Demo finished. Score:", s.score)
