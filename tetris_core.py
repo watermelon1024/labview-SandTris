@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 Pixel = Tuple[int, int]
 ShapeCells = List[Pixel]
 Grid = List[List[int]]
-Statistics = Tuple[int, str]
+Statistics = Tuple[int, str, bool]
 
 # --- Constants ---
 DEFAULT_COLS = 10
@@ -418,9 +418,11 @@ def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> SandtrisCore:
     return SandtrisCore(cols, rows, ppc)
 
 
-def update(game: SandtrisCore, action: int) -> "Statistics":
+def update(game: SandtrisCore, action: int, return_statistics: bool = True) -> Optional["Statistics"]:
     game.step(action)
-    return (game.score, game.get_play_time_formatted())
+    if return_statistics:
+        return get_statistics(game)
+    return None
 
 
 def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
@@ -442,7 +444,7 @@ def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
 
 
 def get_statistics(game: SandtrisCore) -> "Statistics":
-    return (game.score, game.get_play_time_formatted())
+    return (game.score, game.get_play_time_formatted(), game.game_over)
 
 
 # If run as main, demo loop (text only)
