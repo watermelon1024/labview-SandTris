@@ -1,3 +1,4 @@
+import itertools
 import random
 from collections import deque
 from typing import TYPE_CHECKING, List, Optional, Tuple
@@ -29,6 +30,17 @@ ACTION_AI = 6  # Let AI decide
 # Colors (對應 LabVIEW Intensity Graph Z-Scale)
 # 0 is empty
 COLORS = [1, 2, 3, 4, 5, 6, 7]
+COLOR_TO_RGB_MAPPING = {
+    0: (0, 0, 0),  # Black (Background)
+    1: (255, 0, 0),  # Red
+    2: (0, 255, 0),  # Green
+    3: (0, 0, 255),  # Blue
+    4: (255, 255, 0),  # Yellow
+    5: (0, 255, 255),  # Cyan
+    6: (255, 0, 255),  # Magenta
+    7: (255, 255, 255),  # White
+}
+COLOR_TO_24BIT = {color: (r << 16) | (g << 8) | b for color, (r, g, b) in COLOR_TO_RGB_MAPPING.items()}
 
 # Tetromino Shapes (Defined in Cells)
 SHAPES = {
@@ -365,9 +377,8 @@ class SandtrisCore:
         # --- 3. Physics (Sand) ---
         # 讓背景的沙子持續流動
         sand_moved = False
-        for _ in range(2):  # Run physics twice per frame for speed
-            if self.update_sand_physics():
-                sand_moved = True
+        if self.update_sand_physics():
+            sand_moved = True
 
         # 4. 全局消除檢測 (Global Line Check)
         # --- 關鍵修改 ---
@@ -382,11 +393,11 @@ class SandtrisCore:
         display = [row[:] for row in self.grid]
 
         # Overlay Active Piece (Rigid)
-        if not self.game_over:
-            pixels = self.get_projected_pixels(self.piece_x_px, self.piece_y_px, self.current_shape_cells)
-            for x, y in pixels:
-                if 0 <= x < self.width_px and 0 <= y < self.height_px:
-                    display[y][x] = self.piece_color
+        pixels = self.get_projected_pixels(self.piece_x_px, self.piece_y_px, self.current_shape_cells)
+        for x, y in pixels:
+            if 0 <= x < self.width_px and 0 <= y < self.height_px:
+                display[y][x] = self.piece_color
+
         return display
 
 
@@ -400,15 +411,26 @@ def update(game: SandtrisCore, action: int) -> int:  # 0 for ok, 1 for game over
     return 1 if game.game_over else 0
 
 
-def get_view(game: SandtrisCore) -> Grid:
-    if game:
-        return game.get_render_grid()
-    return []
+def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
+    grid = game.get_render_grid()
+
+    # 如果 scalar <= 1，直接轉換顏色並回傳
+    if scalar <= 1:
+        return [[COLOR_TO_24BIT.get(cell, 0) for cell in row] for row in grid]
+
+    # 如果 scalar > 1，進行放大處理
+    # 使用 List Comprehension 提升效能，同時完成水平與垂直放大
+    return [
+        r
+        for row in grid
+        for r in itertools.repeat(
+            [c for cell in row for c in itertools.repeat(COLOR_TO_24BIT.get(cell, 0), scalar)], scalar
+        )
+    ]
 
 
 # If run as main, demo loop (text only)
 if __name__ == "__main__":
-    import itertools
     import time
 
     s = SandtrisCore(12, 12, 4)  # small board for demo
