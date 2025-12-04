@@ -7,19 +7,15 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 from tetris_ai import compute_best_move
 
 if TYPE_CHECKING:
-    from typing import TypedDict
 
     from tetris_ai import AIPlan
-
-    class Statistics(TypedDict):
-        score: int
-        play_time: str
 
 
 # --- Type Definitions ---
 Pixel = Tuple[int, int]
 ShapeCells = List[Pixel]
 Grid = List[List[int]]
+Statistics = Tuple[int, str]
 
 # --- Constants ---
 DEFAULT_COLS = 10
@@ -424,7 +420,7 @@ def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> SandtrisCore:
 
 def update(game: SandtrisCore, action: int) -> "Statistics":
     game.step(action)
-    return {"score": game.score, "play_time": game.get_play_time_formatted()}
+    return (game.score, game.get_play_time_formatted())
 
 
 def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
@@ -446,7 +442,7 @@ def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
 
 
 def get_statistics(game: SandtrisCore) -> "Statistics":
-    return {"score": game.score, "play_time": game.get_play_time_formatted()}
+    return (game.score, game.get_play_time_formatted())
 
 
 # If run as main, demo loop (text only)
