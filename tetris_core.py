@@ -1,8 +1,13 @@
 import random
 from collections import deque
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from tetris_ai import AIPlan, compute_best_move
+
+# --- Type Definitions ---
+Pixel = Tuple[int, int]
+ShapeCells = List[Pixel]
+Grid = List[List[int]]
 
 # --- Constants ---
 DEFAULT_COLS = 10
@@ -35,7 +40,7 @@ SHAPES = {
 
 
 class SandtrisCore:
-    def __init__(self, cols=DEFAULT_COLS, rows=DEFAULT_ROWS, ppc=DEFAULT_PPC):
+    def __init__(self, cols: int = DEFAULT_COLS, rows: int = DEFAULT_ROWS, ppc: int = DEFAULT_PPC):
         self.cols = cols
         self.rows = rows
         self.ppc = ppc
@@ -43,14 +48,16 @@ class SandtrisCore:
         self.height_px = rows * ppc
 
         # 物理網格 (存放靜止的沙子)
-        self.grid = [[0 for _ in range(self.width_px)] for _ in range(self.height_px)]
+        self.grid: Grid = [[0 for _ in range(self.width_px)] for _ in range(self.height_px)]
 
         self.score = 0
         self.game_over = False
         self._just_shattered = False
 
         # Active Piece (Rigid Body State)
-        self.current_shape_cells = []  # List of (x, y) in CELL coordinates relative to piece center
+        self.current_shape_cells: ShapeCells = (
+            []
+        )  # List of (x, y) in CELL coordinates relative to piece center
         self.piece_x_px = 0  # Top-left X in PIXELS
         self.piece_y_px = 0  # Top-left Y in PIXELS
         self.piece_color = 1
@@ -58,7 +65,7 @@ class SandtrisCore:
 
         self.spawn_piece()
 
-    def spawn_piece(self):
+    def spawn_piece(self) -> None:
         shape_keys = list(SHAPES.keys())
         key = shape_keys[random.randint(0, len(shape_keys) - 1)]
         self.current_shape_cells = list(SHAPES[key])  # Copy
@@ -81,7 +88,7 @@ class SandtrisCore:
         # --- Reset AI Plan ---
         self.ai_plan = None
 
-    def get_projected_pixels(self, px_x, px_y, shape_cells):
+    def get_projected_pixels(self, px_x: int, px_y: int, shape_cells: ShapeCells) -> List[Pixel]:
         """
         將「細胞座標 (Cell)」轉換為真實的「像素座標列表 (Pixel List)」
         這是實現 "碎裂" 的關鍵：把大塊變成小沙粒
@@ -97,7 +104,7 @@ class SandtrisCore:
                     pixels.append((base_px + i, base_py + j))
         return pixels
 
-    def check_collision(self, px_x, px_y, shape_cells):
+    def check_collision(self, px_x: int, px_y: int, shape_cells: ShapeCells) -> bool:
         """
         檢查剛體方塊是否撞到邊界或現有的沙子
         """
@@ -116,7 +123,7 @@ class SandtrisCore:
 
         return False
 
-    def rotate_piece(self):
+    def rotate_piece(self) -> None:
         # Standard Rotation: (x, y) -> (-y, x) around center?
         # Simplified: Rotate around first block or center of bounding box
         # Let's try rotating relative to (1,1) roughly
@@ -164,7 +171,7 @@ class SandtrisCore:
             self.piece_x_px = target_x
             self.current_shape_cells = new_shape
 
-    def shatter_and_lock(self):
+    def shatter_and_lock(self) -> None:
         """
         關鍵機制：碎裂
         將剛體的像素位置寫入 grid，從此之後它們變成獨立的沙子。
@@ -185,7 +192,7 @@ class SandtrisCore:
         self.check_lines()
         self.spawn_piece()
 
-    def update_sand_physics(self):
+    def update_sand_physics(self) -> bool:
         """
         沙子物理：只針對 grid 裡的像素運算
         """
@@ -227,7 +234,7 @@ class SandtrisCore:
                         changes = True
         return changes
 
-    def check_lines(self):
+    def check_lines(self) -> bool:
         """
         BFS 消除檢測：
         遍歷網格，尋找所有「同色」且「同時接觸左牆與右牆」的連通區塊並消除。
@@ -291,7 +298,7 @@ class SandtrisCore:
 
         return False
 
-    def step(self, action):
+    def step(self, action: int) -> None:
         if self.game_over:
             return
 
@@ -367,7 +374,7 @@ class SandtrisCore:
 
         self._just_shattered = False
 
-    def get_render_grid(self):
+    def get_render_grid(self) -> Grid:
         # Copy static grid
         display = [row[:] for row in self.grid]
 
@@ -381,16 +388,16 @@ class SandtrisCore:
 
 
 # --- Interface for LabVIEW ---
-game = None
+game: Optional[SandtrisCore] = None
 
 
-def init(cols=10, rows=20, ppc=4):
+def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> str:
     global game
     game = SandtrisCore(cols, rows, ppc)
     return "Ready"
 
 
-def update(action):
+def update(action: int) -> Tuple[int, bool]:
     global game
     if game:
         game.step(action)
@@ -398,7 +405,7 @@ def update(action):
     return 0, True
 
 
-def get_view():
+def get_view() -> Grid:
     global game
     if game:
         return game.get_render_grid()

@@ -1,8 +1,8 @@
 import copy
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, List, Optional, TypedDict
 
 if TYPE_CHECKING:
-    from tetris_core import SandtrisCore
+    from tetris_core import Pixel, SandtrisCore, ShapeCells
 
 
 class AIPlan(TypedDict):
@@ -99,7 +99,15 @@ def compute_best_move(game: "SandtrisCore") -> AIPlan:
     return {"rotation_count": best_move[0], "target_x": best_move[1]}
 
 
-def evaluate_position(game: "SandtrisCore", x, y, shape_cells, has_target, target_center_x, target_avg_y):
+def evaluate_position(
+    game: "SandtrisCore",
+    x: int,
+    y: int,
+    shape_cells: "ShapeCells",
+    has_target: bool,
+    target_center_x: float,
+    target_avg_y: float,
+) -> float:
     score = 0
     pixels = game.get_projected_pixels(x, y, shape_cells)
     my_pixels_set = set(pixels)
@@ -179,7 +187,7 @@ def evaluate_position(game: "SandtrisCore", x, y, shape_cells, has_target, targe
 # --- Helper Functions ---
 
 
-def _calculate_local_bumpiness(game: "SandtrisCore", pixels):
+def _calculate_local_bumpiness(game: "SandtrisCore", pixels: List["Pixel"]) -> int:
     """
     計算局部的平整度懲罰 (負值)
     只檢查受影響的 X 範圍
@@ -218,7 +226,7 @@ def _calculate_local_bumpiness(game: "SandtrisCore", pixels):
     return -total_bumpiness
 
 
-def _get_shape_pixels_relative(shape_cells, ppc):
+def _get_shape_pixels_relative(shape_cells: "ShapeCells", ppc: int) -> List["Pixel"]:
     """Cell 座標 -> 相對 Pixel 座標"""
     pixels = []
     for cx, cy in shape_cells:
@@ -228,7 +236,7 @@ def _get_shape_pixels_relative(shape_cells, ppc):
     return pixels
 
 
-def _rotate_shape_simulate(shape_cells):
+def _rotate_shape_simulate(shape_cells: "ShapeCells") -> "ShapeCells":
     if not shape_cells:
         return []
     cx = sum(c[0] for c in shape_cells) / len(shape_cells)
@@ -244,7 +252,7 @@ def _rotate_shape_simulate(shape_cells):
     return [(x - min_x, y - min_y) for x, y in new_shape]
 
 
-def _simulate_drop_y(game: "SandtrisCore", px_x, shape_cells):
+def _simulate_drop_y(game: "SandtrisCore", px_x: int, shape_cells: "ShapeCells") -> Optional[int]:
     # 從當前實際高度 (或略高) 開始嘗試，以節省時間
     # 為了安全，從 -10 開始搜 (假設方塊不會高過 -10)
     # 或者如果 Core 已經生成在 -10 左右，直接從 game.piece_y_px 開始
