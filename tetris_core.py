@@ -1,8 +1,11 @@
 import random
 from collections import deque
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from tetris_ai import AIPlan, compute_best_move
+from tetris_ai import compute_best_move
+
+if TYPE_CHECKING:
+    from tetris_ai import AIPlan
 
 # --- Type Definitions ---
 Pixel = Tuple[int, int]

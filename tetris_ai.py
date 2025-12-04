@@ -1,13 +1,14 @@
 import copy
-from typing import TYPE_CHECKING, List, Optional, TypedDict
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
+    from typing import TypedDict
+
     from tetris_core import Pixel, SandtrisCore, ShapeCells
 
-
-class AIPlan(TypedDict):
-    rotation_count: int
-    target_x: int
+    class AIPlan(TypedDict):
+        rotation_count: int
+        target_x: int
 
 
 # --- 權重設定 (Weights) ---
@@ -30,7 +31,7 @@ W_HOLES = -4.0
 W_BUMPINESS = -0.5
 
 
-def compute_best_move(game: "SandtrisCore") -> AIPlan:
+def compute_best_move(game: "SandtrisCore") -> "AIPlan":
     """
     計算最佳落點。
     回傳: (best_rotation_count, best_target_x)
