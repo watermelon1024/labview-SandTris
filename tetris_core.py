@@ -388,25 +388,16 @@ class SandtrisCore:
 
 
 # --- Interface for LabVIEW ---
-game: Optional[SandtrisCore] = None
+def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> SandtrisCore:
+    return SandtrisCore(cols, rows, ppc)
 
 
-def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> str:
-    global game
-    game = SandtrisCore(cols, rows, ppc)
-    return "Ready"
+def update(game: SandtrisCore, action: int) -> int:  # 0 for ok, 1 for game over
+    game.step(action)
+    return 1 if game.game_over else 0
 
 
-def update(action: int) -> Tuple[int, bool]:
-    global game
-    if game:
-        game.step(action)
-        return game.score, game.game_over
-    return 0, True
-
-
-def get_view() -> Grid:
-    global game
+def get_view(game: SandtrisCore) -> Grid:
     if game:
         return game.get_render_grid()
     return []
@@ -420,13 +411,9 @@ if __name__ == "__main__":
     s = SandtrisCore(12, 12, 4)  # small board for demo
     ai_mode = input("Enable AI mode? (y/n): ").lower() == "y"
     print("Started demo: press Ctrl+C to quit.")
-    # spawn a few pieces programmatically
     for i in itertools.count(0):
         print("=" * 40, "Tick", i, "=" * 40)
         state = s.step(ACTION_NONE)
-        # every 10 ticks, soft drop random
-        # if i % 8 == 0:
-        #     s.step(ACTION_SOFT_DROP)
         if s.game_over:
             print("Game over at tick", i, "score", s.score)
             break
