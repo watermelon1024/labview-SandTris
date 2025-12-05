@@ -13,6 +13,7 @@
 		<Property Name="server.vi.propertiesEnabled" Type="Bool">true</Property>
 		<Property Name="specify.custom.address" Type="Bool">false</Property>
 		<Item Name="main.vi" Type="VI" URL="../main.vi"/>
+		<Item Name="next_piece.ctl" Type="VI" URL="../next_piece.ctl"/>
 		<Item Name="sandtetris.vi" Type="VI" URL="../sandtetris.vi"/>
 		<Item Name="sandtetris_type.ctl" Type="VI" URL="../sandtetris_type.ctl"/>
 		<Item Name="Dependencies" Type="Dependencies"/>

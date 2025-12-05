@@ -70,7 +70,13 @@ SPACE_TO_INDEX_MAPPING = {shape: index for index, shape in enumerate(SHAPES.keys
 
 
 class SandtrisCore:
-    def __init__(self, cols: int = DEFAULT_COLS, rows: int = DEFAULT_ROWS, ppc: int = DEFAULT_PPC):
+    def __init__(
+        self,
+        cols: int = DEFAULT_COLS,
+        rows: int = DEFAULT_ROWS,
+        ppc: int = DEFAULT_PPC,
+        hardness: int = HARDNESS_MEDIUM,
+    ):
         self.cols = cols
         self.rows = rows
         self.ppc = ppc
@@ -94,6 +100,9 @@ class SandtrisCore:
         self.ai_plan: Optional[AIPlan] = None
         self.next_shape: str = ""
         self.next_piece_color = 1
+
+        # Set colors based on hardness
+        COLORS[:] = COLORS[: HARDNESS_COLOR_MAPPING.get(hardness, 5)]
 
         self.generate_next_piece()
         self.spawn_piece()
@@ -432,8 +441,8 @@ class SandtrisCore:
 
 
 # --- Interface for LabVIEW ---
-def init(cols: int = 10, rows: int = 20, ppc: int = 4) -> SandtrisCore:
-    return SandtrisCore(cols, rows, ppc)
+def init(cols: int = 10, rows: int = 20, ppc: int = 4, hardness: int = HARDNESS_MEDIUM) -> SandtrisCore:
+    return SandtrisCore(cols, rows, ppc, hardness)
 
 
 def update(game: SandtrisCore, action: int, return_statistics: bool = True) -> Optional["Statistics"]:
@@ -468,10 +477,6 @@ def get_statistics(game: SandtrisCore) -> "Statistics":
         SPACE_TO_INDEX_MAPPING[game.next_shape] + (game.next_piece_color - 1) * 7,
         game.game_over,
     )
-
-
-def change_hardness(game: SandtrisCore, hardness: int) -> None:
-    COLORS[:] = COLORS[: HARDNESS_COLOR_MAPPING.get(hardness, 4)]
 
 
 # If run as main, demo loop (text only)
