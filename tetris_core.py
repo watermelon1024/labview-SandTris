@@ -86,20 +86,22 @@ class SandtrisCore:
         # 物理網格 (存放靜止的沙子)
         self.grid: Grid = [[0 for _ in range(self.width_px)] for _ in range(self.height_px)]
 
-        self.score = 0
-        self.start_time = time.time()
-        self.game_over = False
-        self._just_shattered = False
+        self.score: int = 0
+        self.start_time: float = time.time()
+        self.game_over: bool = False
+        self._just_shattered: bool = False
+        self.gravity: int = 1  # in pixels per tick
+        self.hardness: int = hardness
 
         # Active Piece (Rigid Body State)
         self.current_shape_cells: ShapeCells = []
         # List of (x, y) in CELL coordinates relative to piece center
-        self.piece_x_px = 0  # Top-left X in PIXELS
-        self.piece_y_px = 0  # Top-left Y in PIXELS
-        self.piece_color = 1
+        self.piece_x_px: int = 0  # Top-left X in PIXELS
+        self.piece_y_px: int = 0  # Top-left Y in PIXELS
+        self.piece_color: int = 1
         self.ai_plan: Optional[AIPlan] = None
         self.next_shape: str = ""
-        self.next_piece_color = 1
+        self.next_piece_color: int = 1
 
         # Set colors based on hardness
         COLORS[:] = COLORS[: HARDNESS_COLOR_MAPPING.get(hardness, 5)]
@@ -390,9 +392,14 @@ class SandtrisCore:
 
         # --- 2. Gravity (Active Piece) ---
         # 方塊下落速度 (Pixels per tick)
-        drop_speed = self.ppc if action == ACTION_DOWN else 1
-        if action == ACTION_DROP:
-            drop_speed = self.height_px  # Instant
+        if action == ACTION_DOWN:  # soft drop
+            drop_speed = self.ppc
+            self.score += 5  # soft drop bonus
+        elif action == ACTION_DROP:  # hard drop
+            drop_speed = self.height_px - self.piece_y_px  # Instant
+            self.score += drop_speed  # hard drop bonus
+        else:
+            drop_speed = self.gravity
 
         for _ in range(drop_speed):
             if not self.check_collision(self.piece_x_px, self.piece_y_px + 1, self.current_shape_cells):
@@ -400,7 +407,7 @@ class SandtrisCore:
             else:
                 # Collision detected -> SHATTER
                 # Check collision at spawn position for game over
-                if self.check_collision(self.piece_x_px, self.piece_y_px, self.current_shape_cells):
+                if self.piece_y_px < 0:
                     self.game_over = True
                     break
                 self.shatter_and_lock()
