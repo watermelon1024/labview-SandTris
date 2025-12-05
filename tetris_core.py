@@ -447,21 +447,7 @@ class SandtrisCore:
         return f"{minutes:02}:{seconds:02}"
 
 
-# --- Interface for LabVIEW ---
-def init(cols: int = 10, rows: int = 20, ppc: int = 4, hardness: int = HARDNESS_MEDIUM) -> SandtrisCore:
-    return SandtrisCore(cols, rows, ppc, hardness)
-
-
-def update(game: SandtrisCore, action: int, return_statistics: bool = True) -> Optional["Statistics"]:
-    game.step(action)
-    if return_statistics:
-        return get_statistics(game)
-    return None
-
-
-def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
-    grid = game.get_render_grid()
-
+def _render_grid_to_24bit(grid: Grid, scalar: int = 1) -> List[List[int]]:
     # 如果 scalar <= 1，直接轉換顏色並回傳
     if scalar <= 1:
         return [[COLOR_TO_24BIT.get(cell, 0) for cell in row] for row in grid]
@@ -475,6 +461,22 @@ def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
             [c for cell in row for c in itertools.repeat(COLOR_TO_24BIT.get(cell, 0), scalar)], scalar
         )
     ]
+
+
+# --- Interface for LabVIEW ---
+def init(cols: int = 10, rows: int = 20, ppc: int = 4, hardness: int = HARDNESS_MEDIUM) -> SandtrisCore:
+    return SandtrisCore(cols, rows, ppc, hardness)
+
+
+def update(game: SandtrisCore, action: int, return_statistics: bool = True) -> Optional["Statistics"]:
+    game.step(action)
+    if return_statistics:
+        return get_statistics(game)
+    return None
+
+
+def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
+    return _render_grid_to_24bit(game.get_render_grid(), scalar)
 
 
 def get_statistics(game: SandtrisCore) -> "Statistics":
