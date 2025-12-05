@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 Pixel = Tuple[int, int]
 ShapeCells = List[Pixel]
 Grid = List[List[int]]
-Statistics = Tuple[int, str, bool]
+Statistics = Tuple[int, str, int, bool]
 
 # --- Constants ---
 DEFAULT_COLS = 10
@@ -45,7 +45,7 @@ HARDNESS_COLOR_MAPPING = {
 # 0 is empty
 COLORS = [1, 2, 3, 4, 5, 6, 7]
 COLOR_TO_RGB_MAPPING = {
-    0: (0, 0, 0),  # Black (Background)
+    0: (217, 217, 217),  # Black (Background)
     1: (255, 49, 49),  # Red
     2: (0, 191, 99),  # Green
     3: (0, 37, 204),  # Blue
@@ -66,6 +66,7 @@ SHAPES = {
     "T": [(1, 0), (0, 1), (1, 1), (2, 1)],
     "Z": [(0, 0), (1, 0), (1, 1), (2, 1)],
 }
+SPACE_TO_INDEX_MAPPING = {shape: index for index, shape in enumerate(SHAPES.keys())}
 
 
 class SandtrisCore:
@@ -461,7 +462,12 @@ def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
 
 
 def get_statistics(game: SandtrisCore) -> "Statistics":
-    return (game.score, game.get_play_time_formatted(), game.game_over)
+    return (
+        game.score,
+        game.get_play_time_formatted(),
+        SPACE_TO_INDEX_MAPPING[game.next_shape] + (game.next_piece_color - 1) * 7,
+        game.game_over,
+    )
 
 
 def change_hardness(game: SandtrisCore, hardness: int) -> None:
