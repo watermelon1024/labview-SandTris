@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 from tetris_ai import compute_best_move
 
 if TYPE_CHECKING:
-
     from tetris_ai import AIPlan
 
 
@@ -31,17 +30,28 @@ ACTION_DOWN = 4  # Soft drop
 ACTION_DROP = 5  # Hard drop
 ACTION_AI = 6  # Let AI decide
 
-# Colors (對應 LabVIEW Intensity Graph Z-Scale)
+# Hardness Levels
+HARDNESS_EASY = 1
+HARDNESS_MEDIUM = 2
+HARDNESS_HARD = 3
+
+HARDNESS_COLOR_MAPPING = {
+    HARDNESS_EASY: 4,  # 5 colors
+    HARDNESS_MEDIUM: 5,  # 6 colors
+    HARDNESS_HARD: 6,  # 7 colors
+}
+
+# Colors
 # 0 is empty
 COLORS = [1, 2, 3, 4, 5, 6, 7]
 COLOR_TO_RGB_MAPPING = {
     0: (0, 0, 0),  # Black (Background)
-    1: (255, 0, 0),  # Red
-    2: (0, 255, 0),  # Green
-    3: (0, 0, 255),  # Blue
-    4: (255, 255, 0),  # Yellow
-    5: (0, 255, 255),  # Cyan
-    6: (255, 0, 255),  # Magenta
+    1: (255, 49, 49),  # Red
+    2: (0, 191, 99),  # Green
+    3: (0, 37, 204),  # Blue
+    4: (255, 117, 31),  # Orange
+    5: (56, 182, 255),  # Cyan
+    6: (203, 108, 230),  # Magenta
     7: (255, 255, 255),  # White
 }
 COLOR_TO_24BIT = {color: (r << 16) | (g << 8) | b for color, (r, g, b) in COLOR_TO_RGB_MAPPING.items()}
@@ -49,11 +59,11 @@ COLOR_TO_24BIT = {color: (r << 16) | (g << 8) | b for color, (r, g, b) in COLOR_
 # Tetromino Shapes (Defined in Cells)
 SHAPES = {
     "I": [(0, 1), (1, 1), (2, 1), (3, 1)],
-    "O": [(1, 0), (2, 0), (1, 1), (2, 1)],
-    "T": [(1, 0), (0, 1), (1, 1), (2, 1)],
-    "L": [(2, 0), (0, 1), (1, 1), (2, 1)],
     "J": [(0, 0), (0, 1), (1, 1), (2, 1)],
+    "L": [(2, 0), (0, 1), (1, 1), (2, 1)],
+    "O": [(1, 0), (2, 0), (1, 1), (2, 1)],
     "S": [(1, 0), (2, 0), (0, 1), (1, 1)],
+    "T": [(1, 0), (0, 1), (1, 1), (2, 1)],
     "Z": [(0, 0), (1, 0), (1, 1), (2, 1)],
 }
 
@@ -75,21 +85,28 @@ class SandtrisCore:
         self._just_shattered = False
 
         # Active Piece (Rigid Body State)
-        self.current_shape_cells: ShapeCells = (
-            []
-        )  # List of (x, y) in CELL coordinates relative to piece center
+        self.current_shape_cells: ShapeCells = []
+        # List of (x, y) in CELL coordinates relative to piece center
         self.piece_x_px = 0  # Top-left X in PIXELS
         self.piece_y_px = 0  # Top-left Y in PIXELS
         self.piece_color = 1
         self.ai_plan: Optional[AIPlan] = None
+        self.next_shape: str = ""
+        self.next_piece_color = 1
 
+        self.generate_next_piece()
         self.spawn_piece()
 
+    def generate_next_piece(self) -> None:
+        self.next_shape = random.choice(list(SHAPES.keys()))
+        self.next_piece_color = random.choice(COLORS)
+
     def spawn_piece(self) -> None:
-        shape_keys = list(SHAPES.keys())
-        key = shape_keys[random.randint(0, len(shape_keys) - 1)]
-        self.current_shape_cells = list(SHAPES[key])  # Copy
-        self.piece_color = COLORS[random.randint(0, len(COLORS) - 1)]
+        if not self.next_shape:
+            self.generate_next_piece()
+        self.current_shape_cells = SHAPES[self.next_shape]
+        self.piece_color = self.next_piece_color
+        self.generate_next_piece()
 
         # Initial Position (Center Top)
         # Calculate width in cells to center it
@@ -445,6 +462,10 @@ def get_view(game: SandtrisCore, scalar: int = 1) -> Grid:
 
 def get_statistics(game: SandtrisCore) -> "Statistics":
     return (game.score, game.get_play_time_formatted(), game.game_over)
+
+
+def change_hardness(game: SandtrisCore, hardness: int) -> None:
+    COLORS[:] = COLORS[: HARDNESS_COLOR_MAPPING.get(hardness, 4)]
 
 
 # If run as main, demo loop (text only)
