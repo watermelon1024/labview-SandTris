@@ -45,7 +45,7 @@ HARDNESS_COLOR_MAPPING = {
 # 0 is empty
 COLORS = [1, 2, 3, 4, 5, 6, 7]
 COLOR_TO_RGB_MAPPING = {
-    0: (217, 217, 217),  # Black (Background)
+    0: (210, 210, 210),  # Gray (Background)
     1: (255, 49, 49),  # Red
     2: (0, 191, 99),  # Green
     3: (0, 37, 204),  # Blue

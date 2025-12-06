@@ -186,7 +186,7 @@ def is_opponent_update(game: SandtrisRemote):
     return game.is_opponent_updated
 
 
-def get_opponent_data(game: SandtrisRemote):
+def get_opponent_data(game: SandtrisRemote, scaler: int = 1):
     if game.opponent_data is None:
         return (0, [[]], False)
 
@@ -194,7 +194,7 @@ def get_opponent_data(game: SandtrisRemote):
         game.is_opponent_updated = False
         return (
             game.opponent_data["score"],
-            tetris_core._render_grid_to_24bit(game.opponent_data["grid"]),
+            tetris_core._render_grid_to_24bit(game.opponent_data["grid"], scaler),
             game.opponent_data["game_over"],
         )
 
