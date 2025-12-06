@@ -197,3 +197,34 @@ def get_opponent_data(game: SandtrisRemote):
             tetris_core._render_grid_to_24bit(game.opponent_data["grid"]),
             game.opponent_data["game_over"],
         )
+
+
+if __name__ == "__main__":
+    import argparse
+
+    # --- 參數解析設定 ---
+    parser = argparse.ArgumentParser(description="Simple Python Game Client Demo")
+
+    parser.add_argument(
+        "-p", "--player", type=str, default="demo player", help="Player ID (default: demo player)"
+    )
+    parser.add_argument(
+        "--host", type=str, default="localhost:8080", help="Server host (default: localhost:8080)"
+    )
+
+    args = parser.parse_args()
+
+    s = SandtrisRemote(8, 12, 4, server_url=f"http://{args.host}", player_id=args.player)
+    err = s.join_game()
+    if err == 0:
+        while True:
+            if s.check_start():
+                break
+            time.sleep(1)
+        while not s.game_over:
+            s.step(0)
+            if s.opponent_data and s.opponent_data.get("game_over", False):
+                print(f"[{s.player_id}] 對手已結束遊戲！")
+                break
+            time.sleep(0.1)
+        time.sleep(2)  # wait for last updates to be sent
