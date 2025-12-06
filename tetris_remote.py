@@ -8,6 +8,11 @@ from typing import Optional
 
 import tetris_core
 
+JOIN_ERR_CANNOT_CONNECT = 1
+JOIN_ERR_ROOM_FULL = 2
+JOIN_ERR_NAME_TAKEN = 3
+JOIN_ERR_INVALID_NAME = 4
+
 
 class SandtrisRemote(tetris_core.SandtrisCore):
     def __init__(self, *args, server_url: str, player_id: str, **kwargs):
@@ -15,6 +20,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
         self.base_url = server_url
         self.player_id = player_id
         self.opponent_data: Optional[dict] = None
+        self.opponent_name: Optional[str] = None
 
         self.network_interval = 0.5  # seconds
         self.get_lock = threading.Lock()
@@ -29,30 +35,65 @@ class SandtrisRemote(tetris_core.SandtrisCore):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req) as res:
-            return json.loads(res.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req) as res:
+                return json.loads(res.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            try:
+                return json.loads(error_body)
+            except Exception:
+                return {"error": str(e), "body": error_body}
+        except Exception as e:
+            print(f"[Network Error] {e}")
+            return {"error": str(e)}
 
     def _get(self, endpoint, params=None):
         url = f"{self.base_url}{endpoint}"
         if params:
             url += "?" + urllib.parse.urlencode(params)
-        with urllib.request.urlopen(url) as res:
-            return json.loads(res.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(url) as res:
+                return json.loads(res.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            try:
+                return json.loads(error_body)
+            except Exception:
+                return {"error": str(e), "body": error_body}
+        except Exception as e:
+            print(f"[Network Error] {e}")
+            return {"error": str(e)}
 
     def join_game(self):
         print(f"[{self.player_id}] Connecting to {self.base_url} ...")
         try:
             resp = self._post("/join", {"player": self.player_id})
+            if "error" in resp:
+                error_msg = resp["error"].lower()
+                if "full" in error_msg:
+                    print(f"[{self.player_id}] 無法加入: 房間已滿")
+                    return JOIN_ERR_ROOM_FULL
+                elif "taken" in error_msg:
+                    print(f"[{self.player_id}] 無法加入: 名稱已被使用")
+                    return JOIN_ERR_NAME_TAKEN
+                elif "invalid" in error_msg:
+                    print(f"[{self.player_id}] 無法加入: 無效的名稱")
+                    return JOIN_ERR_INVALID_NAME
+                else:
+                    print(f"[{self.player_id}] 無法加入: {error_msg}")
+                    return JOIN_ERR_CANNOT_CONNECT
             print(f"[{self.player_id}] 加入成功: {resp}")
-            return True
-        except urllib.error.URLError as e:
+            return 0
+        except Exception as e:
             print(f"無法連線至伺服器 ({self.base_url}): {e}")
-            return False
+            return JOIN_ERR_CANNOT_CONNECT
 
     def check_start(self, ready: bool = True):
         print(f"[{self.player_id}] 準備就緒，等待對手...")
         try:
             resp = self._post("/ready_check", {"player": self.player_id, "ready": ready})
+            self.opponent_name = resp.get("opponent", None)
             if resp.get("start"):
                 print(f"[{self.player_id}] --- 遊戲開始！ ---")
                 # 設定旗標並啟動網路執行緒
@@ -105,8 +146,12 @@ class SandtrisRemote(tetris_core.SandtrisCore):
 
 
 # --- Interface for LabVIEW ---
-def init(*args, server_url: str, player_id: str, **kwargs):
-    return SandtrisRemote(*args, server_url=server_url, player_id=player_id, **kwargs)
+def init(cols: int, rows: int, ppc: int, server_url: str, player_id: str, **kwargs):
+    return SandtrisRemote(cols, rows, ppc, server_url=server_url, player_id=player_id, **kwargs)
+
+
+def join(game: SandtrisRemote):
+    return game.join_game()
 
 
 def ready(game: SandtrisRemote, ready: bool = True):
@@ -123,6 +168,10 @@ def get_view(*args, **kwargs):
 
 def get_statistics(*args, **kwargs):
     return tetris_core.get_statistics(*args, **kwargs)
+
+
+def get_opponent_name(sandtris_remote: SandtrisRemote):
+    return sandtris_remote.opponent_name if sandtris_remote.opponent_name else ""
 
 
 def get_opponent_data(sandtris_remote: SandtrisRemote):

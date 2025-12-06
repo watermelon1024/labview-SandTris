@@ -33,13 +33,16 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
             if self.path == "/join":
                 data = self._parse_body()
                 p_id = data.get("player")
+                if not p_id:
+                    self._send_json({"error": "Invalid player ID"}, 400)
+                    return
 
                 with LOCK:
-                    if (
-                        len(SERVER_STATE["players"]) >= SERVER_STATE["max_players"]
-                        and p_id not in SERVER_STATE["players"]
-                    ):
+                    if len(SERVER_STATE["players"]) >= SERVER_STATE["max_players"]:
                         self._send_json({"error": "Room is full"}, 403)
+                        return
+                    if p_id in SERVER_STATE["players"]:
+                        self._send_json({"error": "Name taken"}, 403)
                         return
 
                     # 初始化玩家資料
@@ -67,9 +70,19 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
                     if all_ready:
                         SERVER_STATE["game_started"] = True
 
+                    opponent_name = ""
+                    for pid in players:
+                        if pid != p_id:
+                            opponent_name = pid
+                            break
+
                 # 回傳是否開始
                 self._send_json(
-                    {"start": SERVER_STATE["game_started"], "waiting_for": 2 - len(SERVER_STATE["players"])}
+                    {
+                        "start": SERVER_STATE["game_started"],
+                        "waiting_for": 2 - len(SERVER_STATE["players"]),
+                        "opponent": opponent_name,
+                    }
                 )
 
             # --- 3. 遊戲中更新狀態 (Update) ---
@@ -126,10 +139,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "-p", "--port", type=int, default=8000, help="Port to run the server on (default: 8000)"
     )
-
     # 設定 --host 參數，型別為 str，預設 0.0.0.0 (允許外部連線)
     parser.add_argument(
         "--host", type=str, default="0.0.0.0", help="Host interface to bind to (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--hardness", type=int, default=2, help="Game hardness level (default: 2), 1: easy; 2: normal; 3: hard"
     )
 
     args = parser.parse_args()
