@@ -1,20 +1,20 @@
-import argparse
 import http.server
 import json
 import threading
+import time
 from urllib.parse import parse_qs, urlparse
 
 # --- 全域記憶體資料庫 ---
 SERVER_STATE = {
-    "players": {},  # 結構: {"p1": {"ready": False, "data": {...}}, "p2": ...}
+    "players": {},  # 結構: {"p1": {"ready": False, "last_update": 0, "data": {...}}, "p2": ...}
     "max_players": 2,
     "game_started": False,
+    "hardness": 2,
 }
 LOCK = threading.Lock()  # 確保多執行緒寫入安全
 
 
 class GameRequestHandler(http.server.BaseHTTPRequestHandler):
-
     def _send_json(self, data, status=200):
         self.send_response(status)
         self.send_header("Content-type", "application/json")
@@ -38,6 +38,13 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
                     return
 
                 with LOCK:
+                    # cleanup timed-out players
+                    for p in list(SERVER_STATE["players"].keys()):
+                        if SERVER_STATE["players"][p]["last_update"] + 30 < time.time():
+                            print(f"[Server] Player timed out: {p}")
+                            del SERVER_STATE["players"][p]
+                            SERVER_STATE["game_started"] = False
+
                     if len(SERVER_STATE["players"]) >= SERVER_STATE["max_players"]:
                         self._send_json({"error": "Room is full"}, 403)
                         return
@@ -47,10 +54,14 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
 
                     # 初始化玩家資料
                     if p_id not in SERVER_STATE["players"]:
-                        SERVER_STATE["players"][p_id] = {"ready": False, "data": None}
+                        SERVER_STATE["players"][p_id] = {
+                            "ready": False,
+                            "data": None,
+                            "last_update": time.time(),
+                        }
                         print(f"[Server] Player joined: {p_id}")
 
-                self._send_json({"result": "joined", "player": p_id})
+                self._send_json({"result": "joined", "player": p_id, "hardness": SERVER_STATE["hardness"]})
 
             # --- 2. 準備與開始檢查 (Ready Check) ---
             elif self.path == "/ready_check":
@@ -61,7 +72,9 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
 
                 with LOCK:
                     if p_id in SERVER_STATE["players"]:
-                        SERVER_STATE["players"][p_id]["ready"] = is_ready
+                        player = SERVER_STATE["players"][p_id]
+                        player["ready"] = is_ready
+                        player["last_update"] = time.time()
 
                     # 檢查是否所有玩家 (必須滿2人) 都 Ready
                     players = SERVER_STATE["players"]
@@ -93,8 +106,10 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
 
                 with LOCK:
                     if p_id in SERVER_STATE["players"]:
+                        player = SERVER_STATE["players"][p_id]
                         # 更新該玩家的遊戲數據
-                        SERVER_STATE["players"][p_id]["data"] = data
+                        player["data"] = data
+                        player["last_update"] = time.time()
 
                 self._send_json({"status": "updated"})
 
@@ -126,12 +141,14 @@ class GameRequestHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json(opponent_data)
             else:
                 # 可能對手還沒送出第一筆資料，或是還沒有對手
-                self._send_json({"status": "no_data_yet"})
+                self._send_json({"error": "no data yet"})
         else:
             self._send_json({"error": "Path not found"}, 404)
 
 
 if __name__ == "__main__":
+    import argparse
+
     # --- 參數解析設定 ---
     parser = argparse.ArgumentParser(description="Simple Python Game Server")
 
@@ -144,13 +161,17 @@ if __name__ == "__main__":
         "--host", type=str, default="0.0.0.0", help="Host interface to bind to (default: 0.0.0.0)"
     )
     parser.add_argument(
-        "--hardness", type=int, default=2, help="Game hardness level (default: 2), 1: easy; 2: normal; 3: hard"
+        "--hardness",
+        type=int,
+        default=2,
+        help="Game hardness level (default: 2), 1: easy; 2: normal; 3: hard",
     )
 
     args = parser.parse_args()
 
     # 使用解析後的參數啟動伺服器
     server_address = (args.host, args.port)
+    SERVER_STATE["hardness"] = args.hardness
     server = http.server.ThreadingHTTPServer(server_address, GameRequestHandler)
 
     print(f"Server started on {args.host}:{args.port} (Threading enabled)...")

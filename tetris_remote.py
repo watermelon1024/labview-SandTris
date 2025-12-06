@@ -21,6 +21,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
         self.player_id = player_id
         self.opponent_data: Optional[dict] = None
         self.opponent_name: Optional[str] = None
+        self.is_opponent_updated: bool = False
 
         self.network_interval = 0.5  # seconds
         self.get_lock = threading.Lock()
@@ -84,6 +85,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
                     print(f"[{self.player_id}] 無法加入: {error_msg}")
                     return JOIN_ERR_CANNOT_CONNECT
             print(f"[{self.player_id}] 加入成功: {resp}")
+            self.set_hardness(resp.get("hardness", 2))  # type: ignore
             return 0
         except Exception as e:
             print(f"無法連線至伺服器 ({self.base_url}): {e}")
@@ -122,6 +124,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
                     "player": self.player_id,
                     "score": self.score,
                     "grid": self.get_render_grid(),
+                    "game_over": self.game_over,
                 }
 
             # 2. 發送請求 (可能會卡住幾百毫秒，但不會影響主程式)
@@ -137,9 +140,10 @@ class SandtrisRemote(tetris_core.SandtrisCore):
             data = self._get("/get_opponent", {"player": self.player_id})
 
             # 2. 如果成功拿到資料，安全地更新到共享變數
-            if data:
+            if data and "error" not in data:
                 with self.get_lock:
                     self.opponent_data = data
+                self.is_opponent_updated = True
 
             # 3. 休息 x 秒 (網路同步頻率)
             time.sleep(self.network_interval)
@@ -162,6 +166,10 @@ def update(*args, **kwargs):
     return tetris_core.update(*args, **kwargs)
 
 
+def get_hardness(game: SandtrisRemote):
+    return game.hardness
+
+
 def get_view(*args, **kwargs):
     return tetris_core.get_view(*args, **kwargs)
 
@@ -170,16 +178,22 @@ def get_statistics(*args, **kwargs):
     return tetris_core.get_statistics(*args, **kwargs)
 
 
-def get_opponent_name(sandtris_remote: SandtrisRemote):
-    return sandtris_remote.opponent_name if sandtris_remote.opponent_name else ""
+def get_opponent_name(game: SandtrisRemote):
+    return game.opponent_name if game.opponent_name else ""
 
 
-def get_opponent_data(sandtris_remote: SandtrisRemote):
-    if sandtris_remote.opponent_data is None:
-        return (0, [[]])
+def is_opponent_update(game: SandtrisRemote):
+    return game.is_opponent_updated
 
-    with sandtris_remote.get_lock:
+
+def get_opponent_data(game: SandtrisRemote):
+    if game.opponent_data is None:
+        return (0, [[]], False)
+
+    with game.get_lock:
+        game.is_opponent_updated = False
         return (
-            sandtris_remote.opponent_data["score"],
-            tetris_core._render_grid_to_24bit(sandtris_remote.opponent_data["grid"]),
+            game.opponent_data["score"],
+            tetris_core._render_grid_to_24bit(game.opponent_data["grid"]),
+            game.opponent_data["game_over"],
         )

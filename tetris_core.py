@@ -109,6 +109,10 @@ class SandtrisCore:
         self.generate_next_piece()
         self.spawn_piece()
 
+    def set_hardness(self, hardness: int) -> None:
+        self.hardness = hardness
+        COLORS[:] = COLORS[: HARDNESS_COLOR_MAPPING.get(hardness, 5)]
+
     def generate_next_piece(self) -> None:
         self.next_shape = random.choice(list(SHAPES.keys()))
         self.next_piece_color = random.choice(COLORS)
