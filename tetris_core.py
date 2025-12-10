@@ -87,6 +87,7 @@ class SandtrisCore:
         self.grid: Grid = [[0 for _ in range(self.width_px)] for _ in range(self.height_px)]
 
         self.score: int = 0
+        self.continuous_bonus: float = 1.0
         self.start_time: float = time.time()
         self.game_over: bool = False
         self._just_shattered: bool = False
@@ -137,6 +138,9 @@ class SandtrisCore:
 
         self.piece_x_px = start_col * self.ppc
         self.piece_y_px = start_row * self.ppc
+
+        # Reset score bonus
+        self.continuous_bonus = 1.0
 
         # --- Reset AI Plan ---
         self.ai_plan = None
@@ -342,10 +346,13 @@ class SandtrisCore:
         if pixels_to_clear:
             # 分數計算：消除像素數 * 基礎分 + 額外獎勵
             points = len(pixels_to_clear)
-            self.score += points + (cleared_groups * 100)
+            self.score += int(points * self.continuous_bonus)
 
             for px, py in pixels_to_clear:
                 self.grid[py][px] = 0  # 設為空
+
+            # 增加連續消除獎勵
+            self.continuous_bonus *= 1.6
 
             return True  # 代表有消除發生
 
