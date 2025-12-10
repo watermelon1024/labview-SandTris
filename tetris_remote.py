@@ -26,6 +26,8 @@ class SandtrisRemote(tetris_core.SandtrisCore):
         self.network_interval = 0.5  # seconds
         self.get_lock = threading.Lock()
         self.post_lock = threading.Lock()
+        self.t_send: Optional[threading.Thread] = None
+        self.t_recv: Optional[threading.Thread] = None
         self.running = False
 
     def _post(self, endpoint, data):
@@ -101,11 +103,11 @@ class SandtrisRemote(tetris_core.SandtrisCore):
                 # 設定旗標並啟動網路執行緒
                 self.running = True
                 # 建立執行緒
-                t_send = threading.Thread(target=self._send_loop, daemon=True)
-                t_recv = threading.Thread(target=self._recv_loop, daemon=True)
+                self.t_send = threading.Thread(target=self._send_loop, daemon=True)
+                self.t_recv = threading.Thread(target=self._recv_loop, daemon=True)
                 # 啟動執行緒
-                t_send.start()
-                t_recv.start()
+                self.t_send.start()
+                self.t_recv.start()
                 return True
         except Exception as e:
             print(f"連線錯誤: {e}")
@@ -114,24 +116,35 @@ class SandtrisRemote(tetris_core.SandtrisCore):
     def step(self, action: int) -> None:
         with self.post_lock:
             super().step(action)
+        if self.game_over:
+            self.running = False
+            if self.t_send is not None:
+                self.t_send.join()
+            if self.t_recv is not None:
+                self.t_recv.join()
+
+    def post_data(self):
+        # 1. 安全地複製當前狀態 (避免讀到寫一半的資料)
+        with self.post_lock:
+            data = {
+                "player": self.player_id,
+                "score": self.score,
+                "grid": self.get_render_grid(),
+                "game_over": self.game_over,
+            }
+            # 2. 發送請求 (可能會卡住幾百毫秒，但不會影響主程式)
+        self._post("/update", data)
 
     # --- 執行緒 1: 發送資料迴圈 ---
     def _send_loop(self):
         while self.running:
-            # 1. 安全地複製當前狀態 (避免讀到寫一半的資料)
-            with self.post_lock:
-                data = {
-                    "player": self.player_id,
-                    "score": self.score,
-                    "grid": self.get_render_grid(),
-                    "game_over": self.game_over,
-                }
-
-            # 2. 發送請求 (可能會卡住幾百毫秒，但不會影響主程式)
-            self._post("/update", data)
+            self.post_data()
 
             # 3. 休息 x 秒 (網路同步頻率)
             time.sleep(self.network_interval)
+
+        # 最後再送一次資料確保更新
+        self.post_data()
 
     # --- 執行緒 2: 接收資料迴圈 ---
     def _recv_loop(self):
@@ -227,4 +240,3 @@ if __name__ == "__main__":
                 print(f"[{s.player_id}] 對手已結束遊戲！")
                 break
             time.sleep(0.1)
-        time.sleep(2)  # wait for last updates to be sent
