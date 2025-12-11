@@ -1,3 +1,22 @@
+"""
+Tetris AI Module
+================
+
+This module implements the AI logic for the Sand Tetris game.
+It calculates the best move (rotation and target X position) for the current piece
+based on a scoring system that evaluates potential board states.
+
+Strategies:
+    1. Potential Energy Strategy: Used when the target color exists on the board.
+       Encourages placing the piece near existing same-colored sand to facilitate flow.
+    2. Valley Filling Strategy: Used when the target color is not present.
+       Encourages filling gaps and keeping the surface flat.
+
+Functions:
+    compute_best_move: Main entry point to calculate the best move.
+    evaluate_position: Scores a specific board state.
+"""
+
 import copy
 from typing import TYPE_CHECKING, List, Optional
 
@@ -11,21 +30,23 @@ if TYPE_CHECKING:
         target_x: int
 
 
-# --- 權重設定 (Weights) ---
+# --- Weight Settings ---
 
-# 1. 物理勢能策略 (當場上有同色時)
-W_OFFSET_X = 2.5  # 水平擴散獎勵 (在範圍內，越遠越高)
-W_POTENTIAL_H = 3.5  # 垂直位能獎勵 (越高越好)
-W_OVER_RANGE = 5.0  # [新增] 超出範圍懲罰 (係數要比獎勵大，讓分數驟降)
+# 1. Potential Energy Strategy (When same color exists on board)
+W_OFFSET_X = 2.5  # Horizontal spread reward (within range, further is better)
+W_POTENTIAL_H = 3.5  # Vertical potential reward (higher is better)
+W_OVER_RANGE = (
+    5.0  # [New] Out of range penalty (coefficient should be larger than reward to drop score sharply)
+)
 
-# 參數設定
-MAX_FLOW_RANGE = 4  # 最大搜尋半徑
+# Parameter Settings
+MAX_FLOW_RANGE = 4  # Maximum search radius
 MAX_FLOW_RANGE_PPC = MAX_FLOW_RANGE * 4
 
-# 2. 填坑策略 (當場上無同色時)
-W_VALLEY = 6.0  # 填坑獎勵
+# 2. Valley Filling Strategy (When no same color exists on board)
+W_VALLEY = 6.0  # Valley filling reward
 
-# 3. 基礎物理限制
+# 3. Basic Physical Constraints
 W_HEIGHT = -1.0
 W_HOLES = -4.0
 W_BUMPINESS = -0.5
@@ -33,8 +54,16 @@ W_BUMPINESS = -0.5
 
 def compute_best_move(game: "SandtrisCore") -> "AIPlan":
     """
-    計算最佳落點。
-    回傳: (best_rotation_count, best_target_x)
+    Calculates the best move for the current piece.
+
+    Simulates all possible rotations and horizontal positions to find the state
+    with the highest score.
+
+    Args:
+        game (SandtrisCore): The current game state.
+
+    Returns:
+        AIPlan: A dictionary containing 'rotation_count' and 'target_x'.
     """
     best_score = -float("inf")
     best_move = (0, game.piece_x_px)
@@ -42,14 +71,14 @@ def compute_best_move(game: "SandtrisCore") -> "AIPlan":
     original_shape = copy.deepcopy(game.current_shape_cells)
     current_test_shape = original_shape
 
-    # 預先掃描目標色
+    # Pre-scan for target color
     target_pixels = []
     for x in range(game.width_px):
         for y in range(game.height_px):
             if game.grid[y][x] != 0:
                 if game.grid[y][x] == game.piece_color:
                     target_pixels.append((x, y))
-                break  # 每列只取最上面一個
+                break  # Take only the top one for each column
 
     target_center_x = -1
     target_avg_y = -1
@@ -63,11 +92,11 @@ def compute_best_move(game: "SandtrisCore") -> "AIPlan":
         target_center_x = sum_x / count
         target_avg_y = sum_y / count
 
-    # change MAX_FLOW_RANGE by ppc
+    # Change MAX_FLOW_RANGE by ppc
     global MAX_FLOW_RANGE_PPC
     MAX_FLOW_RANGE_PPC = MAX_FLOW_RANGE * game.ppc
 
-    # 模擬
+    # Simulation
     for rot_idx in range(4):
         pixels_shape = _get_shape_pixels_relative(current_test_shape, game.ppc)
         min_x = min(p[0] for p in pixels_shape)
@@ -94,7 +123,7 @@ def compute_best_move(game: "SandtrisCore") -> "AIPlan":
                 best_score = score
                 best_move = (rot_idx, tx)
 
-        # 準備下一次旋轉
+        # Prepare for next rotation
         current_test_shape = _rotate_shape_simulate(current_test_shape)
 
     return {"rotation_count": best_move[0], "target_x": best_move[1]}
@@ -109,6 +138,21 @@ def evaluate_position(
     target_center_x: float,
     target_avg_y: float,
 ) -> float:
+    """
+    Evaluates a specific board position after a simulated drop.
+
+    Args:
+        game (SandtrisCore): The game state.
+        x (int): The target X position (pixels).
+        y (int): The landing Y position (pixels).
+        shape_cells (ShapeCells): The shape cells configuration.
+        has_target (bool): Whether the target color exists on the board.
+        target_center_x (float): Center X of the target color mass.
+        target_avg_y (float): Average Y of the target color mass.
+
+    Returns:
+        float: The calculated score for this position.
+    """
     score = 0
     pixels = game.get_projected_pixels(x, y, shape_cells)
     my_pixels_set = set(pixels)
@@ -132,41 +176,41 @@ def evaluate_position(
     current_piece_y = y
 
     # ==========================================
-    # 策略分支
+    # Strategy Branch
     # ==========================================
 
     if has_target:
-        # --- 策略 A: 勢能衝擊 (限制範圍版) ---
+        # --- Strategy A: Potential Energy Impact (Limited Range Version) ---
 
-        # 1. 水平距離 (Horizontal Offset) - 山峰型計分
+        # 1. Horizontal Offset - Peak Scoring
         dist_x = abs(current_piece_center_x - target_center_x)
 
         if dist_x <= MAX_FLOW_RANGE_PPC:
-            # 範圍內：距離越遠，分數越高 (鼓勵擴散)
+            # Within range: further distance gets higher score (encourage spreading)
             score += dist_x * W_OFFSET_X
         else:
-            # 範圍外：分數驟降
-            # 基礎分是 MAX_FLOW_RANGE * W_OFFSET_X (最高點)
-            # 扣分項是 (超出距離 * 懲罰係數)
+            # Out of range: score drops sharply
+            # Base score is MAX_FLOW_RANGE * W_OFFSET_X (highest point)
+            # Penalty term is (excess distance * penalty coefficient)
             base_max_score = MAX_FLOW_RANGE_PPC * W_OFFSET_X
             excess_dist = dist_x - MAX_FLOW_RANGE_PPC
 
-            # 這裡我們讓分數快速扣減，甚至可以扣到負分
+            # Here we let the score decrease rapidly, even to negative values
             penalty = excess_dist * W_OVER_RANGE
             score += base_max_score - penalty
 
-        # 2. 垂直位能 (Vertical Potential)
+        # 2. Vertical Potential
         diff_h = target_avg_y - current_piece_y
         if diff_h > 0:
-            # 優化：如果距離太遠 (超出 MAX_FLOW_RANGE)，垂直位能的獎勵應該打折
-            # 因為太遠了即使很高也流不過去
+            # Optimization: If distance is too far (exceeds MAX_FLOW_RANGE), vertical potential reward should be discounted
+            # Because if it's too far, it won't flow over even if it's high
             if dist_x > MAX_FLOW_RANGE_PPC:
-                score += diff_h * W_POTENTIAL_H * 0.2  # 遠距離時位能獎勵大幅降低
+                score += diff_h * W_POTENTIAL_H * 0.2  # Significantly reduce potential reward when far away
             else:
                 score += diff_h * W_POTENTIAL_H
 
     else:
-        # --- 策略 B: 填坑防禦 ---
+        # --- Strategy B: Valley Filling Defense ---
         valley_score = 0
         for bx, by in bottom_pixels.items():
             left_solid = (bx == 0) or (game.grid[by][bx - 1] != 0)
@@ -175,7 +219,7 @@ def evaluate_position(
                 valley_score += W_VALLEY
         score += valley_score
 
-    # --- 通用指標 ---
+    # --- General Metrics ---
     avg_y = sum_y / len(pixels)
     score += avg_y * -(W_HEIGHT)
 
@@ -190,20 +234,20 @@ def evaluate_position(
 
 def _calculate_local_bumpiness(game: "SandtrisCore", pixels: List["Pixel"]) -> int:
     """
-    計算局部的平整度懲罰 (負值)
-    只檢查受影響的 X 範圍
+    Calculates local bumpiness penalty (negative value).
+    Only checks the affected X range.
     """
     xs = [p[0] for p in pixels]
     min_x, max_x = min(xs), max(xs)
 
-    # 擴展檢查範圍多一格，以便比較邊緣
+    # Extend check range by one to compare edges
     check_start = max(0, min_x - 1)
     check_end = min(game.width_px - 1, max_x + 1)
 
-    # 取得當前這些列的高度
+    # Get heights of these columns
     col_heights = {}
 
-    # 1. 取得原始高度
+    # 1. Get original heights
     for cx in range(check_start, check_end + 1):
         h = 0
         for cy in range(game.height_px):
@@ -212,23 +256,23 @@ def _calculate_local_bumpiness(game: "SandtrisCore", pixels: List["Pixel"]) -> i
                 break
         col_heights[cx] = h
 
-    # 2. 模擬加入新方塊後的高度
+    # 2. Simulate height after adding new block
     for px, py in pixels:
         new_h = game.height_px - py
         if new_h > col_heights[px]:
             col_heights[px] = new_h
 
-    # 3. 計算相鄰差異
+    # 3. Calculate adjacent differences
     total_bumpiness = 0
-    for cx in range(check_start, check_end):  # 兩兩比較
+    for cx in range(check_start, check_end):  # Compare pairwise
         total_bumpiness += abs(col_heights[cx] - col_heights[cx + 1])
 
-    # 回傳負的分數
+    # Return negative score
     return -total_bumpiness
 
 
 def _get_shape_pixels_relative(shape_cells: "ShapeCells", ppc: int) -> List["Pixel"]:
-    """Cell 座標 -> 相對 Pixel 座標"""
+    """Cell coordinates -> Relative Pixel coordinates"""
     pixels = []
     for cx, cy in shape_cells:
         for i in range(ppc):
@@ -254,12 +298,12 @@ def _rotate_shape_simulate(shape_cells: "ShapeCells") -> "ShapeCells":
 
 
 def _simulate_drop_y(game: "SandtrisCore", px_x: int, shape_cells: "ShapeCells") -> Optional[int]:
-    # 從當前實際高度 (或略高) 開始嘗試，以節省時間
-    # 為了安全，從 -10 開始搜 (假設方塊不會高過 -10)
-    # 或者如果 Core 已經生成在 -10 左右，直接從 game.piece_y_px 開始
+    # Start trying from current actual height (or slightly higher) to save time
+    # For safety, start searching from -10 (assuming block won't be higher than -10)
+    # Or if Core already spawns around -10, start directly from game.piece_y_px
     y = game.piece_y_px
 
-    # 防呆：如果 current y 已經撞到了 (這不應該發生在 AI 預判，但防一下)
+    # Safety check: if current y already collides (should not happen in AI prediction, but just in case)
     if game.check_collision(px_x, y, shape_cells):
         return None
 

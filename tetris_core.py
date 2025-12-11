@@ -1,3 +1,24 @@
+"""
+Tetris Core Module
+==================
+
+This module implements the core logic of the Sand Tetris game, including:
+- Game state management (grid, score, active piece).
+- Physics simulation (sand falling, shattering).
+- Collision detection.
+- Line clearing logic (BFS-based).
+- Rendering utilities.
+
+Classes:
+    SandtrisCore: The main game engine class.
+
+Functions:
+    init: Factory function to create a new game instance.
+    update: Updates the game state by one step.
+    get_view: Returns the current game view as a grid of colors.
+    get_statistics: Returns current game statistics.
+"""
+
 import itertools
 import random
 import time
@@ -19,7 +40,7 @@ Statistics = Tuple[int, str, int, bool]
 # --- Constants ---
 DEFAULT_COLS = 10
 DEFAULT_ROWS = 20
-DEFAULT_PPC = 4  # Pixels Per Cell (每個方塊格由 4x4 像素組成)
+DEFAULT_PPC = 4  # Pixels Per Cell (Each block cell consists of 4x4 pixels)
 
 # Actions
 ACTION_NONE = 0
@@ -70,6 +91,21 @@ SPACE_TO_INDEX_MAPPING = {shape: index for index, shape in enumerate(SHAPES.keys
 
 
 class SandtrisCore:
+    """
+    The main game engine for Sand Tetris.
+
+    Attributes:
+        cols (int): Number of columns in cells.
+        rows (int): Number of rows in cells.
+        ppc (int): Pixels per cell.
+        width_px (int): Total width in pixels.
+        height_px (int): Total height in pixels.
+        grid (Grid): The physical grid storing static sand (0 for empty, color ID for sand).
+        score (int): Current game score.
+        game_over (bool): Whether the game has ended.
+        hardness (int): Current difficulty level.
+    """
+
     def __init__(
         self,
         cols: int = DEFAULT_COLS,
@@ -77,13 +113,22 @@ class SandtrisCore:
         ppc: int = DEFAULT_PPC,
         hardness: int = HARDNESS_MEDIUM,
     ):
+        """
+        Initialize the game engine.
+
+        Args:
+            cols (int): Number of columns.
+            rows (int): Number of rows.
+            ppc (int): Pixels per cell.
+            hardness (int): Difficulty level (1-3).
+        """
         self.cols = cols
         self.rows = rows
         self.ppc = ppc
         self.width_px = cols * ppc
         self.height_px = rows * ppc
 
-        # 物理網格 (存放靜止的沙子)
+        # Physical Grid (Stores static sand)
         self.grid: Grid = [[0 for _ in range(self.width_px)] for _ in range(self.height_px)]
 
         self.score: int = 0
@@ -111,14 +156,20 @@ class SandtrisCore:
         self.spawn_piece()
 
     def set_hardness(self, hardness: int) -> None:
+        """Sets the game difficulty and updates available colors."""
         self.hardness = hardness
         COLORS[:] = COLORS[: HARDNESS_COLOR_MAPPING.get(hardness, 5)]
 
     def generate_next_piece(self) -> None:
+        """Generates the next tetromino shape and color."""
         self.next_shape = random.choice(list(SHAPES.keys()))
         self.next_piece_color = random.choice(COLORS)
 
     def spawn_piece(self) -> None:
+        """
+        Spawns a new active piece at the top of the board.
+        Resets the AI plan and continuous score bonus.
+        """
         if not self.next_shape:
             self.generate_next_piece()
         self.current_shape_cells = SHAPES[self.next_shape]
@@ -147,12 +198,21 @@ class SandtrisCore:
 
     def get_projected_pixels(self, px_x: int, px_y: int, shape_cells: ShapeCells) -> List[Pixel]:
         """
-        將「細胞座標 (Cell)」轉換為真實的「像素座標列表 (Pixel List)」
-        這是實現 "碎裂" 的關鍵：把大塊變成小沙粒
+        Converts "Cell Coordinates" to a list of real "Pixel Coordinates".
+
+        This is the key to "Shattering": turning large blocks into small sand grains.
+
+        Args:
+            px_x (int): Top-left X coordinate in pixels.
+            px_y (int): Top-left Y coordinate in pixels.
+            shape_cells (ShapeCells): List of cell coordinates for the shape.
+
+        Returns:
+            List[Pixel]: A list of (x, y) tuples representing all pixels occupied by the shape.
         """
         pixels = []
         for cx, cy in shape_cells:
-            # 每個 Cell 轉換為 ppc * ppc 個像素
+            # Each Cell converts to ppc * ppc pixels
             base_px = px_x + cx * self.ppc
             base_py = px_y + cy * self.ppc
 
@@ -163,10 +223,18 @@ class SandtrisCore:
 
     def check_collision(self, px_x: int, px_y: int, shape_cells: ShapeCells) -> bool:
         """
-        檢查剛體方塊是否撞到邊界或現有的沙子
+        Checks if the rigid body block collides with boundaries or existing sand.
+
+        Args:
+            px_x (int): X coordinate in pixels.
+            px_y (int): Y coordinate in pixels.
+            shape_cells (ShapeCells): The shape to check.
+
+        Returns:
+            bool: True if a collision is detected, False otherwise.
         """
-        # 優化：只檢查每個 Cell 的邊界像素，或者檢查所有轉換後的像素
-        # 為了準確，我們檢查所有投影像素
+        # Optimization: Check only boundary pixels of each Cell, or check all converted pixels
+        # For accuracy, we check all projected pixels
         pixels = self.get_projected_pixels(px_x, px_y, shape_cells)
 
         for x, y in pixels:
@@ -174,13 +242,17 @@ class SandtrisCore:
             if x < 0 or x >= self.width_px or y >= self.height_px:
                 return True
 
-            # Sand Collision (只有當 y >= 0 時才檢查網格，避免生成時報錯)
+            # Sand Collision (Check grid only when y >= 0 to avoid errors during spawning)
             if y >= 0 and self.grid[y][x] != 0:
                 return True
 
         return False
 
     def rotate_piece(self) -> None:
+        """
+        Rotates the current piece 90 degrees clockwise.
+        Handles wall kicks to prevent the piece from rotating into walls.
+        """
         # Standard Rotation: (x, y) -> (-y, x) around center?
         # Simplified: Rotate around first block or center of bounding box
         # Let's try rotating relative to (1,1) roughly
@@ -202,26 +274,26 @@ class SandtrisCore:
         min_y = min(p[1] for p in new_shape)
         new_shape = [(x - min_x, y - min_y) for x, y in new_shape]
 
-        # Wall Kick (牆壁推擠修正)
-        # 計算新形狀在當前位置的絕對像素邊界
-        # 由於每個 cell 寬度是 ppc，我们需要算最左邊和最右邊的像素點
-        # min_cell_x 肯定是 0 (因為上面正規化了)，所以最左邊是 self.piece_x_px
-        # 我們只需要算最右邊會不會超出去
+        # Wall Kick (Wall push correction)
+        # Calculate absolute pixel boundaries of the new shape at current position
+        # Since each cell width is ppc, we need to calculate the leftmost and rightmost pixel points
+        # min_cell_x is definitely 0 (normalized above), so the leftmost is self.piece_x_px
+        # We only need to calculate if the rightmost side exceeds the boundary
         max_cell_x = max(p[0] for p in new_shape)
-        # 預測的最左與最右像素 X 座標
+        # Predicted leftmost and rightmost pixel X coordinates
         current_min_px = self.piece_x_px
         current_max_px = self.piece_x_px + (max_cell_x * self.ppc) + (self.ppc - 1)
 
         offset_x = 0
 
-        if current_min_px < 0:  # 檢查左牆 (Left Wall)
-            # 如果小於 0，就往右推 (正值) 把它推回 0
+        if current_min_px < 0:  # Check Left Wall
+            # If less than 0, push right (positive value) to bring it back to 0
             offset_x = -current_min_px
-        elif current_max_px >= self.width_px:  # 檢查右牆 (Right Wall)
-            # 如果超出寬度，就往左推 (負值)
+        elif current_max_px >= self.width_px:  # Check Right Wall
+            # If exceeds width, push left (negative value)
             offset_x = (self.width_px - 1) - current_max_px
 
-        # 計算修正後的目標 X 座標
+        # Calculate corrected target X coordinate
         target_x = self.piece_x_px + offset_x
 
         if not self.check_collision(target_x, self.piece_y_px, new_shape):
@@ -230,17 +302,19 @@ class SandtrisCore:
 
     def shatter_and_lock(self) -> None:
         """
-        關鍵機制：碎裂
-        將剛體的像素位置寫入 grid，從此之後它們變成獨立的沙子。
+        Key Mechanism: Shattering.
+
+        Writes the rigid body's pixel positions into the grid; from then on, they become independent sand.
+        Also checks for Game Over condition (if locked above the screen).
         """
         pixels = self.get_projected_pixels(self.piece_x_px, self.piece_y_px, self.current_shape_cells)
         for x, y in pixels:
             # --- Game Over Check ---
-            # 如果方塊撞擊鎖定時，有任何一個像素點還在 y < 0 (螢幕上方區域)
-            # 代表堆疊過高，方塊無法完全進入
+            # If any pixel is still at y < 0 (above screen area) when the block locks
+            # It means the stack is too high, and the block cannot fully enter
             if y < 0:
                 self.game_over = True
-                return  # 結束，不再寫入沙子，也不再生成新方塊
+                return  # End, stop writing sand and spawning new blocks
 
             if 0 <= x < self.width_px and y < self.height_px:
                 self.grid[y][x] = self.piece_color
@@ -251,12 +325,18 @@ class SandtrisCore:
 
     def update_sand_physics(self) -> bool:
         """
-        沙子物理：只針對 grid 裡的像素運算
+        Simulates sand physics.
+
+        Iterates through the grid from bottom to top and moves pixels down or diagonally
+        if there is empty space.
+
+        Returns:
+            bool: True if any sand particle moved, False otherwise.
         """
         changes = False
-        # 從下往上掃描 (Bottom-Up)
+        # Scan from bottom to top (Bottom-Up)
         for y in range(self.height_px - 2, -1, -1):
-            # 隨機化 X 軸遍歷順序，讓擴散更自然
+            # Randomize X-axis traversal order for more natural diffusion
             x_indices = list(range(self.width_px))
             if random.random() > 0.5:
                 x_indices.reverse()
@@ -293,8 +373,13 @@ class SandtrisCore:
 
     def check_lines(self) -> bool:
         """
-        BFS 消除檢測：
-        遍歷網格，尋找所有「同色」且「同時接觸左牆與右牆」的連通區塊並消除。
+        Detects and clears connected lines of the same color.
+
+        Uses BFS to find connected components of the same color that touch both
+        the left and right walls.
+
+        Returns:
+            bool: True if any lines were cleared, False otherwise.
         """
         visited = set()
         pixels_to_clear = set()
@@ -302,16 +387,16 @@ class SandtrisCore:
 
         for y in range(self.height_px):
             for x in range(self.width_px):
-                # 跳過空像素或已處理過的像素
+                # Skip empty pixels or already processed pixels
                 if self.grid[y][x] == 0 or (x, y) in visited:
                     continue
 
-                # --- 開始一個新的顏色區塊 BFS ---
+                # --- Start BFS for a new color block ---
                 target_color = self.grid[y][x]
                 queue = deque([(x, y)])
                 visited.add((x, y))
 
-                current_cluster = []  # 記錄當前區塊的所有座標
+                current_cluster = []  # Record all coordinates of the current block
                 touches_left = False
                 touches_right = False
 
@@ -319,66 +404,79 @@ class SandtrisCore:
                     cx, cy = queue.popleft()
                     current_cluster.append((cx, cy))
 
-                    # 檢查是否觸碰邊界
+                    # Check if touching boundaries
                     if cx == 0:
                         touches_left = True
                     if cx == self.width_px - 1:
                         touches_right = True
 
-                    # 檢查四個方向的鄰居 (上下左右)
+                    # Check neighbors in four directions (up, down, left, right)
                     for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
                         nx, ny = cx + dx, cy + dy
 
-                        # 邊界檢查
+                        # Boundary check
                         if 0 <= nx < self.width_px and 0 <= ny < self.height_px:
-                            # 關鍵條件：未訪問過 且 顏色相同
+                            # Key condition: Not visited AND same color
                             if (nx, ny) not in visited and self.grid[ny][nx] == target_color:
                                 visited.add((nx, ny))
                                 queue.append((nx, ny))
 
-                # --- BFS 結束，判斷是否消除 ---
+                # --- BFS finished, determine if clearing is needed ---
                 if touches_left and touches_right:
                     cleared_groups += 1
                     for px, py in current_cluster:
                         pixels_to_clear.add((px, py))
 
-        # 執行消除
+        # Execute clearing
         if pixels_to_clear:
-            # 分數計算：消除像素數 * 基礎分 + 額外獎勵
+            # Score calculation: Cleared pixels * Base score + Extra bonus
             points = len(pixels_to_clear)
             self.score += int(points * self.continuous_bonus)
 
             for px, py in pixels_to_clear:
-                self.grid[py][px] = 0  # 設為空
+                self.grid[py][px] = 0  # Set to empty
 
-            # 增加連續消除獎勵
+            # Increase continuous clearing bonus
             self.continuous_bonus *= 1.6
 
-            return True  # 代表有消除發生
+            return True  # Indicates clearing occurred
 
         return False
 
     def step(self, action: int) -> None:
+        """
+        Advances the game state by one tick.
+
+        Handles:
+        1. AI decision making (if enabled).
+        2. Active piece movement (Left, Right, Rotate).
+        3. Gravity for the active piece.
+        4. Sand physics simulation.
+        5. Line clearing checks.
+
+        Args:
+            action (int): The action to perform (see ACTION_* constants).
+        """
         if self.game_over:
             return
 
         # check for AI action
         if action == ACTION_AI:
-            # 1. 如果還沒有計畫，呼叫外部函數計算 (只算一次)
+            # 1. If no plan yet, call external function to compute (only once)
             if self.ai_plan is None:
                 self.ai_plan = compute_best_move(self)
-            # 2. 執行計畫 (Override action)
-            # 優先級：旋轉 -> 橫移 -> 下落
+            # 2. Execute plan (Override action)
+            # Priority: Rotate -> Move Horizontally -> Drop
             if self.ai_plan["rotation_count"] != 0:
                 action = ACTION_ROTATE
                 self.ai_plan["rotation_count"] -= 1
             else:
-                # 處理 X 軸移動
-                # 容許一點誤差，因為浮點數或 ppc 對齊問題
+                # Handle X-axis movement
+                # Allow slight error due to floating point or ppc alignment issues
                 diff = self.ai_plan["target_x"] - self.piece_x_px
 
-                if abs(diff) <= self.ppc:  # 已經對齊
-                    # 到達目標，執行降落
+                if abs(diff) <= self.ppc:  # Aligned
+                    # Reached target, execute drop
                     action = ACTION_DOWN
                 elif diff > 0:
                     action = ACTION_RIGHT
@@ -402,7 +500,7 @@ class SandtrisCore:
             self.rotate_piece()
 
         # --- 2. Gravity (Active Piece) ---
-        # 方塊下落速度 (Pixels per tick)
+        # Block drop speed (Pixels per tick)
         if action == ACTION_DOWN:  # soft drop
             drop_speed = self.ppc
             self.score += 5  # soft drop bonus
@@ -425,20 +523,28 @@ class SandtrisCore:
                 break
 
         # --- 3. Physics (Sand) ---
-        # 讓背景的沙子持續流動
+        # Keep background sand flowing
         sand_moved = False
         if self.update_sand_physics():
             sand_moved = True
 
-        # 4. 全局消除檢測 (Global Line Check)
-        # --- 關鍵修改 ---
-        # 只有當「沙子移動了」或者「剛有方塊碎裂」時，才耗費效能去跑 BFS
+        # 4. Global Line Check
+        # --- Key Modification ---
+        # Only run BFS when "sand moved" or "block just shattered" to save performance
         if sand_moved or self._just_shattered:
             self.check_lines()
 
         self._just_shattered = False
 
     def get_render_grid(self) -> Grid:
+        """
+        Generates the current display grid.
+
+        Combines the static sand grid with the active rigid piece.
+
+        Returns:
+            Grid: A 2D list representing the game board colors.
+        """
         # Copy static grid
         display = [row[:] for row in self.grid]
 
@@ -451,20 +557,31 @@ class SandtrisCore:
         return display
 
     def get_play_time(self) -> float:
+        """Returns the elapsed play time in seconds."""
         return time.time() - self.start_time
 
     def get_play_time_formatted(self) -> str:
+        """Returns the elapsed play time formatted as MM:SS."""
         minutes, seconds = divmod(int(self.get_play_time()), 60)
         return f"{minutes:02}:{seconds:02}"
 
 
 def _render_grid_to_24bit(grid: Grid, scalar: int = 1) -> List[List[int]]:
-    # 如果 scalar <= 1，直接轉換顏色並回傳
+    """
+    Converts the grid color IDs to 24-bit RGB integers and optionally scales it up.
+
+    Args:
+        grid (Grid): The game grid.
+        scalar (int): Scaling factor (e.g., 2 means 2x zoom).
+
+    Returns:
+        List[List[int]]: A 2D list of 24-bit RGB integers.
+    """
+    # If scalar <= 1, convert color directly and return
     if scalar <= 1:
         return [[COLOR_TO_24BIT.get(cell, 0) for cell in row] for row in grid]
 
-    # 如果 scalar > 1，進行放大處理
-    # 使用 List Comprehension 提升效能，同時完成水平與垂直放大
+    # If scalar > 1, perform scaling
     return [
         r
         for row in grid
@@ -512,7 +629,7 @@ if __name__ == "__main__":
             break
         if ai_mode:
             action = ACTION_AI
-            time.sleep(0.25)  # slow down for demo
+            time.sleep(0.2)  # slow down for demo
         else:
             ipt = input("Press Enter to continue, or type 'q' to quit: ").strip()
             if ipt.lower() == "q":

@@ -1,3 +1,28 @@
+"""
+Tetris Remote Client Module
+===========================
+
+This module implements a network-enabled version of the Sand Tetris game client.
+It extends the `SandtrisCore` to support multiplayer features by communicating
+with a central game server.
+
+Features:
+- Connects to a game server via HTTP.
+- Synchronizes game state (score, grid) with the server.
+- Retrieves opponent's game state for display.
+- Handles network communication in separate threads to avoid blocking the game loop.
+
+Classes:
+    SandtrisRemote: The network-enabled game client class.
+
+Functions:
+    init: Factory function to create a new remote game instance.
+    join: Joins a game room on the server.
+    ready: Signals readiness to start the game.
+    update: Updates the game state and handles network sync.
+    get_opponent_data: Retrieves the opponent's current game state.
+"""
+
 import json
 import threading
 import time
@@ -15,7 +40,27 @@ JOIN_ERR_INVALID_NAME = 4
 
 
 class SandtrisRemote(tetris_core.SandtrisCore):
+    """
+    A subclass of SandtrisCore that adds networking capabilities.
+
+    Attributes:
+        base_url (str): The URL of the game server.
+        player_id (str): The unique identifier for this player.
+        opponent_data (dict): The latest data received from the opponent.
+        opponent_name (str): The name of the opponent.
+        is_opponent_updated (bool): Flag indicating if new opponent data is available.
+        network_interval (float): Time interval (in seconds) between network requests.
+    """
+
     def __init__(self, *args, server_url: str, player_id: str, **kwargs):
+        """
+        Initialize the remote game client.
+
+        Args:
+            server_url (str): The URL of the game server.
+            player_id (str): The player's name/ID.
+            *args, **kwargs: Arguments passed to the parent SandtrisCore class.
+        """
         super().__init__(*args, **kwargs)
         self.base_url = server_url
         self.player_id = player_id
@@ -31,6 +76,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
         self.running = False
 
     def _post(self, endpoint, data):
+        """Helper method to send HTTP POST requests."""
         url = f"{self.base_url}{endpoint}"
         req = urllib.request.Request(
             url,
@@ -52,6 +98,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
             return {"error": str(e)}
 
     def _get(self, endpoint, params=None):
+        """Helper method to send HTTP GET requests."""
         url = f"{self.base_url}{endpoint}"
         if params:
             url += "?" + urllib.parse.urlencode(params)
@@ -69,51 +116,71 @@ class SandtrisRemote(tetris_core.SandtrisCore):
             return {"error": str(e)}
 
     def join_game(self):
+        """
+        Attempts to join the game server.
+
+        Returns:
+            int: 0 on success, or an error code (JOIN_ERR_*) on failure.
+        """
         print(f"[{self.player_id}] Connecting to {self.base_url} ...")
         try:
             resp = self._post("/join", {"player": self.player_id})
             if "error" in resp:
                 error_msg = resp["error"].lower()
                 if "full" in error_msg:
-                    print(f"[{self.player_id}] 無法加入: 房間已滿")
+                    print(f"[{self.player_id}] Cannot join: Room is full")
                     return JOIN_ERR_ROOM_FULL
                 elif "taken" in error_msg:
-                    print(f"[{self.player_id}] 無法加入: 名稱已被使用")
+                    print(f"[{self.player_id}] Cannot join: Name taken")
                     return JOIN_ERR_NAME_TAKEN
                 elif "invalid" in error_msg:
-                    print(f"[{self.player_id}] 無法加入: 無效的名稱")
+                    print(f"[{self.player_id}] Cannot join: Invalid name")
                     return JOIN_ERR_INVALID_NAME
                 else:
-                    print(f"[{self.player_id}] 無法加入: {error_msg}")
+                    print(f"[{self.player_id}] Cannot join: {error_msg}")
                     return JOIN_ERR_CANNOT_CONNECT
-            print(f"[{self.player_id}] 加入成功: {resp}")
+            print(f"[{self.player_id}] Joined successfully: {resp}")
             self.set_hardness(resp.get("hardness", 2))  # type: ignore
             return 0
         except Exception as e:
-            print(f"無法連線至伺服器 ({self.base_url}): {e}")
+            print(f"Cannot connect to server ({self.base_url}): {e}")
             return JOIN_ERR_CANNOT_CONNECT
 
     def check_start(self, ready: bool = True):
-        print(f"[{self.player_id}] 準備就緒，等待對手...")
+        """
+        Checks if the game can start (i.e., if the opponent is ready).
+        Also signals this player's readiness.
+
+        Args:
+            ready (bool): Whether this player is ready.
+
+        Returns:
+            bool: True if the game has started, False otherwise.
+        """
+        print(f"[{self.player_id}] Ready, waiting for opponent...")
         try:
             resp = self._post("/ready_check", {"player": self.player_id, "ready": ready})
             self.opponent_name = resp.get("opponent", None)
             if resp.get("start"):
-                print(f"[{self.player_id}] --- 遊戲開始！ ---")
-                # 設定旗標並啟動網路執行緒
+                print(f"[{self.player_id}] --- Game Start! ---")
+                # Set flag and start network threads
                 self.running = True
-                # 建立執行緒
+                # Create threads
                 self.t_send = threading.Thread(target=self._send_loop, daemon=True)
                 self.t_recv = threading.Thread(target=self._recv_loop, daemon=True)
-                # 啟動執行緒
+                # Start threads
                 self.t_send.start()
                 self.t_recv.start()
                 return True
         except Exception as e:
-            print(f"連線錯誤: {e}")
+            print(f"Connection error: {e}")
         return False
 
     def step(self, action: int) -> None:
+        """
+        Advances the game state and manages network threads.
+        Overrides the parent `step` method to include thread safety.
+        """
         with self.post_lock:
             super().step(action)
         if self.game_over:
@@ -124,7 +191,8 @@ class SandtrisRemote(tetris_core.SandtrisCore):
                 self.t_recv.join()
 
     def post_data(self):
-        # 1. 安全地複製當前狀態 (避免讀到寫一半的資料)
+        """Sends the current game state to the server."""
+        # 1. Safely copy current state (avoid reading partially written data)
         with self.post_lock:
             data = {
                 "player": self.player_id,
@@ -132,33 +200,35 @@ class SandtrisRemote(tetris_core.SandtrisCore):
                 "grid": self.get_render_grid(),
                 "game_over": self.game_over,
             }
-            # 2. 發送請求 (可能會卡住幾百毫秒，但不會影響主程式)
+            # 2. Send request (may block for a few hundred ms, but won't affect main program)
         self._post("/update", data)
 
-    # --- 執行緒 1: 發送資料迴圈 ---
+    # --- Thread 1: Data Sending Loop ---
     def _send_loop(self):
+        """Background thread loop for sending data to the server."""
         while self.running:
             self.post_data()
 
-            # 3. 休息 x 秒 (網路同步頻率)
+            # 3. Sleep for x seconds (Network sync interval)
             time.sleep(self.network_interval)
 
-        # 最後再送一次資料確保更新
+        # Send data one last time to ensure update
         self.post_data()
 
-    # --- 執行緒 2: 接收資料迴圈 ---
+    # --- Thread 2: Data Receiving Loop ---
     def _recv_loop(self):
+        """Background thread loop for receiving opponent data from the server."""
         while self.running:
-            # 1. 發送 GET 請求
+            # 1. Send GET request
             data = self._get("/get_opponent", {"player": self.player_id})
 
-            # 2. 如果成功拿到資料，安全地更新到共享變數
+            # 2. If data received successfully, safely update shared variables
             if data and "error" not in data:
                 with self.get_lock:
                     self.opponent_data = data
                 self.is_opponent_updated = True
 
-            # 3. 休息 x 秒 (網路同步頻率)
+            # 3. Sleep for x seconds (Network sync interval)
             time.sleep(self.network_interval)
 
 
@@ -215,7 +285,7 @@ def get_opponent_data(game: SandtrisRemote, scaler: int = 1):
 if __name__ == "__main__":
     import argparse
 
-    # --- 參數解析設定 ---
+    # --- Argument Parsing Setup ---
     parser = argparse.ArgumentParser(description="Simple Python Game Client Demo")
 
     parser.add_argument(
@@ -237,6 +307,6 @@ if __name__ == "__main__":
         while not s.game_over:
             s.step(0)
             if s.opponent_data and s.opponent_data.get("game_over", False):
-                print(f"[{s.player_id}] 對手已結束遊戲！")
+                print(f"[{s.player_id}] Opponent has finished the game!")
                 break
             time.sleep(0.1)
