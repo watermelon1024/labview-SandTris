@@ -40,7 +40,7 @@ The project uses a hybrid architecture:
 
 - **LabVIEW:** Community 2025 Q3 (or compatible version).
 - **Python:** Version 3.6 - 3.14 (or even newer version if compatible).
-  - *Note:* Ensure the Python version specified in the LabVIEW "Python Version" String Control matches your installed version.
+  - *Note:* Ensure the Python version specified in the LabVIEW "Python Version" String Control matches your installed version. (You may need to turn on `Edit > Show Hidden Controls While Editing` to see it.)
 
 ## How to Run
 
