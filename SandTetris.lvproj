@@ -16,6 +16,10 @@
 		<Item Name="next_piece.ctl" Type="VI" URL="../next_piece.ctl"/>
 		<Item Name="sandtetris.vi" Type="VI" URL="../sandtetris.vi"/>
 		<Item Name="sandtetris_type.ctl" Type="VI" URL="../sandtetris_type.ctl"/>
+		<Item Name="server.py" Type="Document" URL="../server.py"/>
+		<Item Name="tetris_ai.py" Type="Document" URL="../tetris_ai.py"/>
+		<Item Name="tetris_core.py" Type="Document" URL="../tetris_core.py"/>
+		<Item Name="tetris_remote.py" Type="Document" URL="../tetris_remote.py"/>
 		<Item Name="Dependencies" Type="Dependencies"/>
 		<Item Name="Build Specifications" Type="Build"/>
 	</Item>
