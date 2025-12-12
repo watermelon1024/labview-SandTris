@@ -165,6 +165,7 @@ class SandtrisRemote(tetris_core.SandtrisCore):
                 print(f"[{self.player_id}] --- Game Start! ---")
                 # Set flag and start network threads
                 self.running = True
+                self.start_time = time.time()
                 # Create threads
                 self.t_send = threading.Thread(target=self._send_loop, daemon=True)
                 self.t_recv = threading.Thread(target=self._recv_loop, daemon=True)
