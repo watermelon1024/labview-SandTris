@@ -57,9 +57,9 @@ HARDNESS_MEDIUM = 2
 HARDNESS_HARD = 3
 
 HARDNESS_COLOR_MAPPING = {
-    HARDNESS_EASY: 4,  # 5 colors
-    HARDNESS_MEDIUM: 5,  # 6 colors
-    HARDNESS_HARD: 6,  # 7 colors
+    HARDNESS_EASY: 5,  # 5 colors
+    HARDNESS_MEDIUM: 6,  # 6 colors
+    HARDNESS_HARD: 7,  # 7 colors
 }
 
 # Colors
