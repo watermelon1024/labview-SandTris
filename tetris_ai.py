@@ -35,9 +35,7 @@ if TYPE_CHECKING:
 # 1. Potential Energy Strategy (When same color exists on board)
 W_OFFSET_X = 2.5  # Horizontal spread reward (within range, further is better)
 W_POTENTIAL_H = 3.5  # Vertical potential reward (higher is better)
-W_OVER_RANGE = (
-    5.0  # [New] Out of range penalty (coefficient should be larger than reward to drop score sharply)
-)
+W_OVER_RANGE = 5.0  # Out of range penalty (coefficient should be larger than reward to drop score sharply)
 
 # Parameter Settings
 MAX_FLOW_RANGE = 4  # Maximum search radius
